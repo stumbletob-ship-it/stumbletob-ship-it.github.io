@@ -1,0 +1,14 @@
+{
+  "name": "Affenplatte",
+  "short_name": "Affenplatte",
+  "description": "VR-Spiel: Bewege dich nur mit deinen Armen über eine schwebende Platte.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#1d3557",
+  "theme_color": "#1d3557",
+  "icons": [
+    { "src": "icon-192.png", "type": "image/png", "sizes": "192x192" },
+    { "src": "icon-512.png", "type": "image/png", "sizes": "512x512", "purpose": "any" }
+  ]
+}
