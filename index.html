@@ -1,0 +1,673 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1d3557">
+<title>Affenplatte</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #b9d3ee; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #ui {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: min(440px, 88vw); padding: 28px 28px 22px; box-sizing: border-box;
+    background: rgba(16, 28, 48, 0.82); color: #eef3fa; border-radius: 18px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.35); text-align: center;
+  }
+  #ui h1 { margin: 0 0 6px; font-size: 30px; letter-spacing: 0.5px; }
+  #ui p { margin: 8px 0; line-height: 1.45; font-size: 15px; color: #c9d6e8; }
+  #ui ul { text-align: left; margin: 12px 0 4px; padding-left: 20px; font-size: 14px; color: #c9d6e8; line-height: 1.55; }
+  #vr {
+    margin-top: 16px; font-size: 18px; font-weight: 600; padding: 12px 30px; border: 0; border-radius: 999px;
+    background: #f4a259; color: #1b1b1b; cursor: pointer;
+  }
+  #vr:disabled { background: #6b7a8f; color: #d5dde8; cursor: default; }
+  #msg { min-height: 1.2em; font-size: 13px !important; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <h1>Affenplatte</h1>
+  <p>Du hast keine Beine – nur Arme. Drück deine Hände auf den Boden und schieb dich vorwärts.</p>
+  <ul>
+    <li><b>Laufen:</b> Hände auf den Boden, nach hinten schieben</li>
+    <li><b>Springen:</b> kräftig nach unten drücken und loslassen</li>
+    <li><b>Drehen:</b> rechter Stick links/rechts</li>
+    <li><b>Zurück zur Mitte:</b> A oder X</li>
+  </ul>
+  <button id="vr" disabled>VR starten</button>
+  <p id="msg">Prüfe VR …</p>
+</div>
+
+<script>
+"use strict";
+
+// =====================================================================
+// ===== PHYSICS START ==================================================
+// Armbasierte Fortbewegung: Hände bleiben an Oberflächen "kleben",
+// bewegst du die Hand, bewegt sich stattdessen dein Körper.
+// =====================================================================
+const Physics = (() => {
+  const CFG = {
+    gravity: 9.81,
+    handRadius: 0.07,      // Größe der Hand-Kollision (m)
+    contactKeep: 0.03,     // so weit darf die Hand abheben und gilt noch als "dran"
+    releaseDist: 0.004,    // Hand pro Frame so weit von der Fläche weg => loslassen
+    maxHandStep: 0.25,     // Schutz gegen Tracking-Sprünge
+    jumpMultiplier: 1.15,  // Verstärkung beim Abstoßen
+    jumpThreshold: 1.0,    // ab dieser Geschwindigkeit (m/s) wird verstärkt
+    maxJumpSpeed: 6.5,     // maximale Abstoß-Geschwindigkeit
+    historyFrames: 6,      // Frames für die Durchschnitts-Geschwindigkeit
+    bodyOffset: 0.35,      // Körperkugel liegt so weit unter dem Kopf
+    bodyRadius: 0.45,
+    headRadius: 0.15,
+    groundFriction: 6,
+    airDrag: 0.05,
+    killY: -25,            // darunter: Respawn
+  };
+
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const scl = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const len = (a) => Math.hypot(a[0], a[1], a[2]);
+
+  // Signed distance from point to an axis-aligned box {c, h} + surface normal
+  function boxQuery(p, b) {
+    const d = [p[0] - b.c[0], p[1] - b.c[1], p[2] - b.c[2]];
+    const q = [Math.abs(d[0]) - b.h[0], Math.abs(d[1]) - b.h[1], Math.abs(d[2]) - b.h[2]];
+    const mx = Math.max(q[0], q[1], q[2]);
+    if (mx <= 0) {
+      const ax = q[0] === mx ? 0 : (q[1] === mx ? 1 : 2);
+      const n = [0, 0, 0]; n[ax] = Math.sign(d[ax]) || 1;
+      return { dist: mx, normal: n };
+    }
+    const o = [Math.max(q[0], 0) * Math.sign(d[0]), Math.max(q[1], 0) * Math.sign(d[1]), Math.max(q[2], 0) * Math.sign(d[2])];
+    const l = len(o);
+    return { dist: l, normal: scl(o, 1 / l) };
+  }
+
+  function query(p, colliders) {
+    let best = { dist: Infinity, normal: [0, 1, 0] };
+    for (const b of colliders) {
+      const r = boxQuery(p, b);
+      if (r.dist < best.dist) best = r;
+    }
+    return best;
+  }
+
+  // Highest surface top directly below p (for blob shadows); null if none
+  function groundBelow(p, colliders) {
+    let top = null;
+    for (const b of colliders) {
+      if (Math.abs(p[0] - b.c[0]) <= b.h[0] && Math.abs(p[2] - b.c[2]) <= b.h[2]) {
+        const t = b.c[1] + b.h[1];
+        if (p[1] >= t - 0.05 && (top === null || t > top)) top = t;
+      }
+    }
+    return top;
+  }
+
+  function createPlayer(colliders, spawn) {
+    const P = {
+      pos: [...spawn], vel: [0, 0, 0], yaw: 0, grounded: false, events: [],
+      head: [0, 1.6, 0], hist: [], wasTouching: false,
+      hands: [0, 1].map(i => ({ i, local: null, prevLocal: null, pos: [0, 0, 0], touching: false, normal: [0, 1, 0], active: false })),
+    };
+    const rot = (v) => { const c = Math.cos(P.yaw), s = Math.sin(P.yaw); return [c * v[0] + s * v[2], v[1], -s * v[0] + c * v[2]]; };
+    const toWorld = (l) => add(P.pos, rot(l));
+    P.toWorld = toWorld;
+
+    P.respawn = (headLocal = P.head) => {
+      P.vel = [0, 0, 0]; P.hist.length = 0; P.wasTouching = false;
+      for (const h of P.hands) { h.touching = false; h.prevLocal = null; }
+      const r = rot([headLocal[0], 0, headLocal[2]]);
+      P.pos = [spawn[0] - r[0], spawn[1], spawn[2] - r[2]];
+    };
+
+    // Drehen um den Kopf (Snap-Turn)
+    P.turn = (angle, headLocal = P.head) => {
+      const hw = toWorld(headLocal);
+      P.yaw += angle;
+      P.pos = sub(hw, rot(headLocal));
+    };
+
+    // headLocal / locals: Positionen im Tracking-Raum (Meter, y = Höhe über echtem Boden)
+    P.update = (dt, headLocal, locals) => {
+      dt = Math.min(Math.max(dt, 1e-4), 1 / 30);
+      P.events.length = 0;
+      P.head = headLocal;
+      const start = [...P.pos];
+      const H = P.hands;
+
+      for (let k = 0; k < 2; k++) {
+        const h = H[k], l = locals[k];
+        if (!l) { h.active = false; h.touching = false; h.prevLocal = null; continue; }
+        h.active = true; h.local = l;
+        if (!h.prevLocal) { h.prevLocal = l; h.touching = false; }
+      }
+
+      // 1) Freier Flug, wenn keine Hand festhält
+      const pinned = H.some(h => h.active && h.touching);
+      if (!pinned) {
+        P.vel[1] -= CFG.gravity * dt;
+        const drag = Math.exp(-CFG.airDrag * dt);
+        P.vel[0] *= drag; P.vel[2] *= drag;
+        P.pos = add(P.pos, scl(P.vel, dt));
+      }
+
+      // 2) Festhaltende Hände: Handbewegung => Körper bewegt sich entgegengesetzt
+      let sum = [0, 0, 0], n = 0;
+      for (const h of H) {
+        if (!h.active || !h.touching) continue;
+        let m = rot(sub(h.local, h.prevLocal));
+        if (dot(m, h.normal) > CFG.releaseDist) { h.touching = false; continue; } // Hand hebt ab
+        const L = len(m);
+        if (L > CFG.maxHandStep) m = scl(m, CFG.maxHandStep / L);
+        sum = sub(sum, m); n++;
+      }
+      if (n) P.pos = add(P.pos, scl(sum, 1 / n));
+
+      // 3) Hände können nicht in Oberflächen eindringen => Körper wird weggedrückt
+      for (const h of H) {
+        if (!h.active) continue;
+        const t = toWorld(h.local);
+        const q = query(t, colliders);
+        const r = CFG.handRadius;
+        if (q.dist < r + (h.touching ? 0 : 0.002)) {
+          let corr = scl(q.normal, Math.max(0, r - q.dist));
+          const L = len(corr);
+          if (L > CFG.maxHandStep) corr = scl(corr, CFG.maxHandStep / L);
+          P.pos = add(P.pos, corr);
+          if (!h.touching) {
+            const sp = len(sub(h.local, h.prevLocal)) / dt + len(P.vel) * 0.3;
+            P.events.push({ type: 'touch', hand: h.i, speed: sp });
+          }
+          h.touching = true; h.normal = q.normal; h.pos = add(t, corr);
+        } else if (h.touching && q.dist < r + CFG.contactKeep) {
+          h.pos = t; h.normal = q.normal;
+        } else {
+          h.touching = false; h.pos = t;
+        }
+      }
+
+      // 4) Körper und Kopf kollidieren mit der Welt
+      P.grounded = false;
+      let q = query(sub(toWorld(headLocal), [0, CFG.bodyOffset, 0]), colliders);
+      if (q.dist < CFG.bodyRadius) {
+        P.pos = add(P.pos, scl(q.normal, CFG.bodyRadius - q.dist));
+        const vn = dot(P.vel, q.normal);
+        if (vn < 0) P.vel = sub(P.vel, scl(q.normal, vn));
+        if (q.normal[1] > 0.5) P.grounded = true;
+      }
+      q = query(toWorld(headLocal), colliders);
+      if (q.dist < CFG.headRadius) {
+        P.pos = add(P.pos, scl(q.normal, CFG.headRadius - q.dist));
+        const vn = dot(P.vel, q.normal);
+        if (vn < 0) P.vel = sub(P.vel, scl(q.normal, vn));
+      }
+
+      // 5) Geschwindigkeit: beim Loslassen wird die Schwungbewegung übernommen
+      const anyTouch = H.some(h => h.touching);
+      if (anyTouch) {
+        let inst = scl(sub(P.pos, start), 1 / dt);
+        const il = len(inst);
+        if (il > CFG.maxJumpSpeed) inst = scl(inst, CFG.maxJumpSpeed / il);
+        P.hist.push(inst);
+        if (P.hist.length > CFG.historyFrames) P.hist.shift();
+        P.vel = [...inst];
+      } else if (P.wasTouching) {
+        let avg = [0, 0, 0];
+        for (const v of P.hist) avg = add(avg, v);
+        if (P.hist.length) avg = scl(avg, 1 / P.hist.length);
+        let sp = len(avg);
+        if (sp > CFG.jumpThreshold) { avg = scl(avg, CFG.jumpMultiplier); sp *= CFG.jumpMultiplier; }
+        if (sp > CFG.maxJumpSpeed) avg = scl(avg, CFG.maxJumpSpeed / sp);
+        P.vel = avg; P.hist.length = 0;
+        P.events.push({ type: 'release', speed: len(avg) });
+      }
+      if (P.grounded && !anyTouch) {
+        const f = Math.exp(-CFG.groundFriction * dt);
+        P.vel[0] *= f; P.vel[2] *= f;
+      }
+      P.wasTouching = anyTouch;
+      for (const h of H) if (h.active) h.prevLocal = h.local;
+
+      if (toWorld(headLocal)[1] < CFG.killY) { P.respawn(headLocal); P.events.push({ type: 'respawn' }); }
+    };
+    return P;
+  }
+
+  return { CFG, createPlayer, query, groundBelow };
+})();
+// ===== PHYSICS END ====================================================
+
+// ---------------------------------------------------------------------
+// Welt
+// ---------------------------------------------------------------------
+const PLATFORM_HALF = 15;                         // 30 x 30 m Platte
+const COLLIDERS = [
+  { c: [0, -0.5, 0], h: [PLATFORM_HALF, 0.5, PLATFORM_HALF] },
+];
+const SPAWN = [0, 0.3, 0];
+const player = Physics.createPlayer(COLLIDERS, SPAWN);
+
+// ---------------------------------------------------------------------
+// Mathe (Matrizen spaltenweise wie in WebGL)
+// ---------------------------------------------------------------------
+const M4 = {
+  mul(a, b) {
+    const o = new Float32Array(16);
+    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
+      o[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3];
+    }
+    return o;
+  },
+  trs(t, s) { return new Float32Array([s[0], 0, 0, 0, 0, s[1], 0, 0, 0, 0, s[2], 0, t[0], t[1], t[2], 1]); },
+  rotY(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]); },
+  translate(x, y, z) { return M4.trs([x, y, z], [1, 1, 1]); },
+  perspective(fovy, aspect, near, far) {
+    const f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
+    return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0]);
+  },
+  lookAt(e, t, up) {
+    const norm = v => { const l = Math.hypot(...v); return v.map(x => x / l); };
+    const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
+    const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    const f = norm([t[0] - e[0], t[1] - e[1], t[2] - e[2]]);
+    const s = norm(cross(f, up)), u = cross(s, f);
+    return new Float32Array([s[0], u[0], -f[0], 0, s[1], u[1], -f[1], 0, s[2], u[2], -f[2], 0, -dot(s, e), -dot(u, e), dot(f, e), 1]);
+  },
+};
+function qrot(q, v) { // Vektor mit Quaternion drehen
+  const [x, y, z, w] = q;
+  const ix = w * v[0] + y * v[2] - z * v[1], iy = w * v[1] + z * v[0] - x * v[2];
+  const iz = w * v[2] + x * v[1] - y * v[0], iw = -x * v[0] - y * v[1] - z * v[2];
+  return [ix * w + iw * -x + iy * -z - iz * -y, iy * w + iw * -y + iz * -x - ix * -z, iz * w + iw * -z + ix * -y - iy * -x];
+}
+
+// ---------------------------------------------------------------------
+// WebGL
+// ---------------------------------------------------------------------
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2', { xrCompatible: true, antialias: true });
+const ui = document.getElementById('ui'), btn = document.getElementById('vr'), msg = document.getElementById('msg');
+if (!gl) { msg.textContent = 'WebGL 2 wird von diesem Browser nicht unterstützt.'; throw new Error('no webgl2'); }
+
+function shader(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function program(vs, fs) {
+  const p = gl.createProgram();
+  gl.attachShader(p, shader(gl.VERTEX_SHADER, vs)); gl.attachShader(p, shader(gl.FRAGMENT_SHADER, fs));
+  gl.bindAttribLocation(p, 0, 'aPos'); gl.bindAttribLocation(p, 1, 'aNor');
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {}, n = gl.getProgramParameter(p, gl.ACTIVE_UNIFORMS);
+  for (let i = 0; i < n; i++) { const name = gl.getActiveUniform(p, i).name; u[name] = gl.getUniformLocation(p, name); }
+  return { p, u };
+}
+
+const SKY_HORIZON = [0.74, 0.85, 0.95];
+const litProg = program(`#version 300 es
+in vec3 aPos; in vec3 aNor;
+uniform mat4 uModel, uView, uProj;
+out vec3 vWorld; out vec3 vNor; out vec3 vView;
+void main() {
+  vec4 w = uModel * vec4(aPos, 1.0);
+  vWorld = w.xyz; vNor = mat3(uModel) * aNor;
+  vec4 v = uView * w; vView = v.xyz;
+  gl_Position = uProj * v;
+}`, `#version 300 es
+precision highp float;
+in vec3 vWorld; in vec3 vNor; in vec3 vView;
+uniform vec3 uColor; uniform vec3 uFog; uniform float uGrid; uniform float uEmissive; uniform float uAlpha;
+out vec4 outColor;
+void main() {
+  vec3 n = normalize(vNor);
+  vec3 L = normalize(vec3(0.4, 1.0, 0.3));
+  float light = max(dot(n, L), 0.0) * 0.7 + 0.38;
+  vec3 col = uColor;
+  if (uGrid > 0.5 && n.y > 0.5) {
+    vec2 g = vWorld.xz;
+    vec2 cell = floor(g);
+    col *= mix(0.93, 1.03, mod(cell.x + cell.y, 2.0));
+    vec2 f = abs(fract(g) - 0.5);
+    float e = 0.5 - max(f.x, f.y);
+    float w = fwidth(g.x) * 1.2 + 0.012;
+    col = mix(col * 0.72, col, smoothstep(0.0, w, e));
+    vec2 f5 = abs(fract(g / 5.0) - 0.5);
+    float e5 = (0.5 - max(f5.x, f5.y)) * 5.0;
+    col = mix(col * 0.6, col, smoothstep(0.0, w * 1.6, e5));
+  }
+  col = col * light + uColor * uEmissive;
+  float fog = 1.0 - exp(-length(vView) * 0.03);
+  outColor = vec4(mix(col, uFog, fog), uAlpha);
+}`);
+
+const skyProg = program(`#version 300 es
+in vec3 aPos;
+uniform mat4 uView, uProj; uniform vec3 uCenter;
+out vec3 vDir;
+void main() { vDir = aPos; gl_Position = uProj * uView * vec4(aPos * 400.0 + uCenter, 1.0); }
+`, `#version 300 es
+precision highp float;
+in vec3 vDir; uniform vec3 uHorizon;
+out vec4 outColor;
+void main() {
+  vec3 d = normalize(vDir);
+  vec3 zen = vec3(0.20, 0.42, 0.80), low = vec3(0.30, 0.37, 0.50);
+  vec3 c = d.y > 0.0 ? mix(uHorizon, zen, pow(d.y, 0.55)) : mix(uHorizon, low, pow(-d.y, 0.45));
+  vec3 sd = normalize(vec3(0.4, 0.55, 0.3));
+  float s = max(dot(d, sd), 0.0);
+  c += vec3(1.0, 0.95, 0.82) * (pow(s, 600.0) * 1.6 + pow(s, 12.0) * 0.18);
+  outColor = vec4(c, 1.0);
+}`);
+
+function mesh(pos, nor, idx) {
+  const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  const b0 = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b0); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(pos), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0); gl.vertexAttribPointer(0, 3, gl.FLOAT, false, 0, 0);
+  const b1 = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b1); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(nor), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(1); gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 0, 0);
+  const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib); gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(idx), gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+  return { vao, count: idx.length };
+}
+function boxMesh() { // Würfel -0.5..0.5
+  const P = [], N = [], I = [];
+  for (const n of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+    const u = n[1] !== 0 ? [1, 0, 0] : [0, 1, 0];
+    const v = [n[1] * u[2] - n[2] * u[1], n[2] * u[0] - n[0] * u[2], n[0] * u[1] - n[1] * u[0]];
+    const b = P.length / 3;
+    for (const [a, c] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      P.push(0.5 * (n[0] + a * u[0] + c * v[0]), 0.5 * (n[1] + a * u[1] + c * v[1]), 0.5 * (n[2] + a * u[2] + c * v[2]));
+      N.push(...n);
+    }
+    I.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  return mesh(P, N, I);
+}
+function sphereMesh(R = 16, S = 24) { // Radius 1
+  const P = [], I = [];
+  for (let i = 0; i <= R; i++) {
+    const th = i / R * Math.PI;
+    for (let j = 0; j <= S; j++) {
+      const ph = j / S * Math.PI * 2;
+      P.push(Math.sin(th) * Math.cos(ph), Math.cos(th), Math.sin(th) * Math.sin(ph));
+    }
+  }
+  for (let i = 0; i < R; i++) for (let j = 0; j < S; j++) {
+    const a = i * (S + 1) + j, b = a + S + 1;
+    I.push(a, a + 1, b, b, a + 1, b + 1);
+  }
+  return mesh(P, P, I);
+}
+const BOX = boxMesh(), SPHERE = sphereMesh();
+
+// Rand-Leisten der Platte (nur Optik)
+const RIMS = (() => {
+  const h = PLATFORM_HALF, t = 0.12, y = 0.006;
+  return [
+    { c: [0, y, h - t / 2], s: [2 * h, 0.012, t] }, { c: [0, y, -h + t / 2], s: [2 * h, 0.012, t] },
+    { c: [h - t / 2, y, 0], s: [t, 0.012, 2 * h] }, { c: [-h + t / 2, y, 0], s: [t, 0.012, 2 * h] },
+  ];
+})();
+
+function drawLit(m, model, color, opts = {}) {
+  const u = litProg.u;
+  gl.uniformMatrix4fv(u.uModel, false, model);
+  gl.uniform3fv(u.uColor, color);
+  gl.uniform1f(u.uGrid, opts.grid ? 1 : 0);
+  gl.uniform1f(u.uEmissive, opts.emissive || 0);
+  gl.uniform1f(u.uAlpha, opts.alpha ?? 1);
+  gl.bindVertexArray(m.vao);
+  gl.drawElements(gl.TRIANGLES, m.count, gl.UNSIGNED_SHORT, 0);
+}
+
+const handFlash = [0, 0];
+function drawScene(proj, view, eye, hands) {
+  // Himmel
+  gl.disable(gl.CULL_FACE); gl.depthMask(false);
+  gl.useProgram(skyProg.p);
+  gl.uniformMatrix4fv(skyProg.u.uView, false, view);
+  gl.uniformMatrix4fv(skyProg.u.uProj, false, proj);
+  gl.uniform3fv(skyProg.u.uCenter, eye);
+  gl.uniform3fv(skyProg.u.uHorizon, SKY_HORIZON);
+  gl.bindVertexArray(SPHERE.vao);
+  gl.drawElements(gl.TRIANGLES, SPHERE.count, gl.UNSIGNED_SHORT, 0);
+  gl.depthMask(true); gl.enable(gl.CULL_FACE);
+
+  gl.useProgram(litProg.p);
+  gl.uniformMatrix4fv(litProg.u.uView, false, view);
+  gl.uniformMatrix4fv(litProg.u.uProj, false, proj);
+  gl.uniform3fv(litProg.u.uFog, SKY_HORIZON);
+
+  for (const b of COLLIDERS) drawLit(BOX, M4.trs(b.c, [b.h[0] * 2, b.h[1] * 2, b.h[2] * 2]), [0.80, 0.84, 0.88], { grid: true });
+  for (const r of RIMS) drawLit(BOX, M4.trs(r.c, r.s), [0.96, 0.62, 0.30], { emissive: 0.45 });
+
+  // Hände
+  for (const h of hands) {
+    if (!h.active) continue;
+    const f = handFlash[h.i];
+    const col = h.touching ? [0.42 + f * 0.3, 0.30 + f * 0.2, 0.22 + f * 0.1] : [0.30, 0.21, 0.15];
+    const r = Physics.CFG.handRadius;
+    drawLit(SPHERE, M4.trs(h.pos, [r, r, r]), col);
+  }
+
+  // Schatten (Blobs)
+  gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA); gl.depthMask(false);
+  gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-2, -2);
+  const blob = (p, radius, strength) => {
+    const top = Physics.groundBelow(p, COLLIDERS);
+    if (top === null) return;
+    const hgt = p[1] - top, a = strength * Math.max(0, 1 - hgt / 4);
+    if (a <= 0.01) return;
+    const r = radius * (1 + hgt * 0.15);
+    drawLit(SPHERE, M4.trs([p[0], top + 0.003, p[2]], [r, 0.001, r]), [0, 0, 0], { alpha: a });
+  };
+  if (xrSession) blob(player.toWorld(player.head), 0.35, 0.35);
+  for (const h of hands) if (h.active) blob(h.pos, 0.07, 0.45);
+  gl.disable(gl.POLYGON_OFFSET_FILL); gl.depthMask(true); gl.disable(gl.BLEND);
+  gl.bindVertexArray(null);
+}
+
+// ---------------------------------------------------------------------
+// Sound (wird per Code erzeugt) + Vibration
+// ---------------------------------------------------------------------
+let audio = null, noiseBuf = null;
+function ensureAudio() {
+  try {
+    if (!audio) {
+      audio = new (window.AudioContext || window.webkitAudioContext)();
+      noiseBuf = audio.createBuffer(1, audio.sampleRate * 0.1, audio.sampleRate);
+      const d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+    }
+    if (audio.state === 'suspended') audio.resume();
+  } catch (e) { /* kein Audio */ }
+}
+function thump(strength) {
+  if (!audio || audio.state !== 'running') return;
+  const t = audio.currentTime, k = Math.min(1, strength);
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(130 + 60 * k, t);
+  o.frequency.exponentialRampToValueAtTime(50, t + 0.1);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.05 + 0.3 * k, t + 0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.13);
+  o.connect(g).connect(audio.destination); o.start(t); o.stop(t + 0.14);
+  const n = audio.createBufferSource(), ng = audio.createGain(), lp = audio.createBiquadFilter();
+  n.buffer = noiseBuf; lp.type = 'lowpass'; lp.frequency.value = 900 + 1500 * k; ng.gain.value = 0.05 + 0.2 * k;
+  n.connect(lp).connect(ng).connect(audio.destination); n.start(t);
+}
+function buzz(src, strength, ms) {
+  try {
+    const gp = src && src.gamepad; if (!gp) return;
+    const h = gp.hapticActuators && gp.hapticActuators[0];
+    if (h && h.pulse) { const r = h.pulse(strength, ms); if (r && r.catch) r.catch(() => {}); }
+    else if (gp.vibrationActuator) gp.vibrationActuator.playEffect('dual-rumble', { duration: ms, strongMagnitude: strength, weakMagnitude: strength }).catch(() => {});
+  } catch (e) { /* ignorieren */ }
+}
+
+// ---------------------------------------------------------------------
+// WebXR
+// ---------------------------------------------------------------------
+const HAND_FORWARD = 0.04;   // Handkugel leicht vor dem Controller (Knöchel)
+const SNAP_ANGLE = Math.PI / 4;
+let xrSession = null, xrRef = null, xrLayer = null, floorOffset = 0, lastT = 0, needSpawn = false;
+let turnLatch = false, respawnLatch = false, paused = false;
+
+async function enterVR() {
+  ensureAudio();
+  const s = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'hand-tracking'] });
+  try {
+    await gl.makeXRCompatible();
+    xrLayer = new XRWebGLLayer(s, gl, { antialias: true });
+    try { if ('fixedFoveation' in xrLayer) xrLayer.fixedFoveation = 0.5; } catch (e) {}
+    s.updateRenderState({ baseLayer: xrLayer, depthNear: 0.02, depthFar: 1000 });
+    try { xrRef = await s.requestReferenceSpace('local-floor'); floorOffset = 0; }
+    catch (e) { xrRef = await s.requestReferenceSpace('local'); floorOffset = 1.6; }
+    if (s.supportedFrameRates && s.updateTargetFrameRate) {
+      const rates = Array.from(s.supportedFrameRates);
+      if (rates.includes(90)) s.updateTargetFrameRate(90).catch(() => {});
+    }
+  } catch (e) { s.end(); throw e; }
+  xrSession = s; lastT = 0; needSpawn = true; paused = false;
+  // Systemmenü offen (Meta-Taste) => Spiel pausieren
+  s.addEventListener('visibilitychange', () => { paused = s.visibilityState !== 'visible'; lastT = 0; });
+  ui.style.display = 'none';
+  s.addEventListener('end', () => {
+    xrSession = null; ui.style.display = '';
+    requestAnimationFrame(desktopFrame);
+  });
+  s.requestAnimationFrame(onXRFrame);
+}
+
+function onXRFrame(t, frame) {
+  const s = frame.session;
+  s.requestAnimationFrame(onXRFrame);
+  const pose = frame.getViewerPose(xrRef);
+  if (!pose) return;
+  const dt = lastT ? (t - lastT) / 1000 : 1 / 72;
+  lastT = t;
+
+  const hp = pose.transform.position;
+  const head = [hp.x, hp.y + floorOffset, hp.z];
+  if (needSpawn) { player.respawn(head); needSpawn = false; }
+
+  const locals = [null, null], sources = [null, null];
+  for (const src of s.inputSources) {
+    const k = src.handedness === 'left' ? 0 : src.handedness === 'right' ? 1 : -1;
+    if (k < 0) continue;
+    const space = src.gripSpace || src.targetRaySpace;
+    if (!space) continue;
+    const p = frame.getPose(space, xrRef);
+    if (!p) continue;
+    const o = p.transform.orientation, q = [o.x, o.y, o.z, o.w];
+    const off = qrot(q, [0, 0, -HAND_FORWARD]);
+    const pp = p.transform.position;
+    locals[k] = [pp.x + off[0], pp.y + floorOffset + off[1], pp.z + off[2]];
+    sources[k] = src;
+  }
+
+  // Eingaben: Snap-Turn (rechter Stick), Respawn (A / X)
+  if (paused) { for (const h of player.hands) { h.touching = false; h.prevLocal = null; } }
+  const rg = sources[1] && sources[1].gamepad;
+  const sx = rg && rg.axes.length >= 4 ? rg.axes[2] : 0;
+  if (!turnLatch && Math.abs(sx) > 0.7) { player.turn(sx > 0 ? -SNAP_ANGLE : SNAP_ANGLE, head); turnLatch = true; }
+  if (Math.abs(sx) < 0.3) turnLatch = false;
+  let resp = false;
+  for (const src of sources) { const gp = src && src.gamepad; if (gp && gp.buttons[4] && gp.buttons[4].pressed) resp = true; }
+  if (resp && !respawnLatch) player.respawn(head);
+  respawnLatch = resp;
+
+  if (!paused) player.update(dt, head, locals);
+
+  for (const ev of player.events) {
+    if (ev.type === 'touch') {
+      const k = Math.min(1, ev.speed / 3);
+      buzz(sources[ev.hand], 0.15 + 0.6 * k, 25 + 30 * k);
+      thump(k);
+      handFlash[ev.hand] = 1;
+    }
+  }
+  handFlash[0] *= 0.85; handFlash[1] *= 0.85;
+
+  // Rendern
+  gl.bindFramebuffer(gl.FRAMEBUFFER, xrLayer.framebuffer);
+  gl.clearColor(...SKY_HORIZON, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+  // Welt -> Tracking-Raum (Spielerposition, Drehung, ggf. Boden-Ausgleich)
+  const worldToRig = M4.mul(M4.translate(0, -floorOffset, 0),
+    M4.mul(M4.rotY(-player.yaw), M4.translate(-player.pos[0], -player.pos[1], -player.pos[2])));
+  const eye = player.toWorld(head);
+  for (const view of pose.views) {
+    const vp = xrLayer.getViewport(view);
+    gl.viewport(vp.x, vp.y, vp.width, vp.height);
+    drawScene(view.projectionMatrix, M4.mul(view.transform.inverse.matrix, worldToRig), eye, player.hands);
+  }
+}
+
+// ---------------------------------------------------------------------
+// Vorschau am PC (ohne VR)
+// ---------------------------------------------------------------------
+let orbit = 0.6, dragging = false, lastX = 0, prevNow = 0;
+canvas.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; });
+window.addEventListener('pointerup', () => { dragging = false; });
+window.addEventListener('pointermove', e => { if (dragging) { orbit -= (e.clientX - lastX) * 0.005; lastX = e.clientX; } });
+
+const demoHands = [0, 1].map(i => ({ i, active: true, touching: true, pos: [0, 0, 0] }));
+function desktopFrame(now) {
+  if (xrSession) return;
+  const dt = prevNow ? (now - prevNow) / 1000 : 0; prevNow = now;
+  if (!dragging) orbit += dt * 0.05;
+  const w = canvas.clientWidth, h = canvas.clientHeight, dpr = Math.min(window.devicePixelRatio || 1, 2);
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(...SKY_HORIZON, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+  const eye = [Math.sin(orbit) * 22, 7, Math.cos(orbit) * 22];
+  const proj = M4.perspective(60 * Math.PI / 180, canvas.width / canvas.height, 0.05, 1000);
+  const view = M4.lookAt(eye, [0, -1.5, 0], [0, 1, 0]);
+  // zwei "Hände" auf der Platte als Größenvergleich
+  const tt = now / 1000;
+  demoHands[0].pos = [-0.25, 0.07 + Math.max(0, Math.sin(tt * 3)) * 0.15, Math.cos(tt * 3) * 0.2];
+  demoHands[1].pos = [0.25, 0.07 + Math.max(0, -Math.sin(tt * 3)) * 0.15, -Math.cos(tt * 3) * 0.2];
+  drawScene(proj, view, eye, demoHands);
+  requestAnimationFrame(desktopFrame);
+}
+requestAnimationFrame(desktopFrame);
+
+// ---------------------------------------------------------------------
+// Start
+// ---------------------------------------------------------------------
+btn.addEventListener('click', () => {
+  enterVR().catch(e => { msg.textContent = 'VR konnte nicht gestartet werden: ' + e.message; });
+});
+(async () => {
+  if (!navigator.xr || !navigator.xr.isSessionSupported) {
+    msg.textContent = 'Kein WebXR hier. Öffne die Seite im Browser deiner Meta Quest.';
+    return;
+  }
+  let ok = false;
+  try { ok = await navigator.xr.isSessionSupported('immersive-vr'); } catch (e) {}
+  if (!ok) { msg.textContent = 'VR wird hier nicht unterstützt. Öffne die Seite im Browser deiner Meta Quest.'; return; }
+  btn.disabled = false; msg.textContent = '';
+  // Als installierte Store-App (PWA) direkt in VR starten
+  if (window.getDigitalGoodsService !== undefined) {
+    enterVR().catch(() => { msg.textContent = 'Tippe auf "VR starten".'; });
+  }
+})();
+</script>
+</body>
+</html>
