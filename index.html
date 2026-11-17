@@ -1,0 +1,2099 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#14404a">
+<title>Affenplatte</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<style>
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #9fd3e6; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; }
+  canvas { display: block; width: 100%; height: 100%; }
+  #ui {
+    position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%);
+    width: min(460px, 92vw); max-height: 94vh; overflow: auto; padding: 22px 24px 16px; box-sizing: border-box;
+    background: rgba(16, 40, 44, 0.86); color: #eef6f3; border-radius: 18px;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.35); text-align: center;
+  }
+  #ui h1 { margin: 0 0 4px; font-size: 30px; letter-spacing: 0.5px; }
+  #ui p { margin: 6px 0; line-height: 1.45; font-size: 15px; color: #c6dad5; }
+  #ui ul { text-align: left; margin: 10px 0 4px; padding-left: 20px; font-size: 14px; color: #c6dad5; line-height: 1.5; }
+  .label { font-size: 13px; color: #9fbab3; margin-top: 12px; }
+  #colors { display: flex; gap: 9px; justify-content: center; margin: 6px 0 2px; flex-wrap: wrap; }
+  #colors button { width: 32px; height: 32px; border-radius: 50%; border: 3px solid transparent; cursor: pointer; padding: 0; }
+  #colors button.sel { border-color: #ffffff; box-shadow: 0 0 0 2px rgba(0,0,0,0.4); }
+  .box { background: rgba(255,255,255,0.07); border-radius: 12px; padding: 12px; margin-top: 14px; }
+  .row { display: flex; gap: 8px; justify-content: center; align-items: center; flex-wrap: wrap; }
+  .btn2 { font-size: 15px; font-weight: 600; padding: 9px 16px; border: 0; border-radius: 10px; background: #3f8577; color: #fff; cursor: pointer; }
+  .btn2:disabled { opacity: 0.5; cursor: default; }
+  #code { width: 96px; font-size: 18px; text-align: center; letter-spacing: 3px; text-transform: uppercase; padding: 8px; border-radius: 10px; border: 0; }
+  #roomcode { font-size: 24px; font-weight: 700; letter-spacing: 4px; color: #ffd27a; }
+  #vr { margin-top: 14px; font-size: 18px; font-weight: 600; padding: 12px 30px; border: 0; border-radius: 999px; background: #f4a259; color: #1b1b1b; cursor: pointer; }
+  #vr:disabled { background: #6b7a8f; color: #d5dde8; cursor: default; }
+  .small { font-size: 13px !important; min-height: 1.2em; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="ui">
+  <h1>Affenplatte</h1>
+  <p>Eine Bambusplattform mitten im Wasser. Du hast keine Beine – nur Arme.</p>
+  <ul>
+    <li><b>Laufen:</b> Hände auf den Boden, nach hinten schieben</li>
+    <li><b>Springen:</b> kräftig nach unten drücken und loslassen</li>
+    <li><b>Drehen:</b> rechter Stick links/rechts</li>
+    <li><b>Zurück zur Mitte:</b> A oder X</li>
+  </ul>
+  <div class="label">Deine Farbe</div>
+  <div id="colors"></div>
+  <div class="box">
+    <div id="lobby">
+      <div class="row"><button class="btn2" id="host">Raum erstellen</button></div>
+      <div class="row" style="margin-top:10px">
+        <input id="code" maxlength="4" placeholder="CODE" autocomplete="off" autocapitalize="characters" spellcheck="false">
+        <button class="btn2" id="join">Beitreten</button>
+      </div>
+    </div>
+    <div id="room" hidden>
+      <div>Raum-Code: <span id="roomcode"></span></div>
+      <p class="small" id="count"></p>
+      <div class="row"><button class="btn2" id="leave">Raum verlassen</button></div>
+    </div>
+    <p class="small" id="netmsg">Ohne Raum spielst du allein.</p>
+  </div>
+  <button id="vr" disabled>VR starten</button>
+  <p class="small" id="msg">Prüfe VR …</p>
+</div>
+
+<!-- PeerJS 1.5.5 (MIT-Lizenz, https://peerjs.com) für die Multiplayer-Verbindung -->
+<script>(()=>{function e(e,t,n,r){Object.defineProperty(e,t,{get:n,set:r,enumerable:!0,configurable:!0})}function t(e){return e&&e.__esModule?e.default:e}class n{constructor(){this.chunkedMTU=16300,this._dataCount=1,this.chunk=e=>{let t=[],n=e.byteLength,r=Math.ceil(n/this.chunkedMTU),i=0,s=0;for(;s<n;){let o=Math.min(n,s+this.chunkedMTU),a=e.slice(s,o),c={__peerData:this._dataCount,n:i,data:a,total:r};t.push(c),s=o,i++}return this._dataCount++,t}}}class r{append_buffer(e){this.flush(),this._parts.push(e)}append(e){this._pieces.push(e)}flush(){if(this._pieces.length>0){let e=new Uint8Array(this._pieces);this._parts.push(e),this._pieces=[]}}toArrayBuffer(){let e=[];for(let t of this._parts)e.push(t);return function(e){let t=0;for(let n of e)t+=n.byteLength;let n=new Uint8Array(t),r=0;for(let t of e){let e=new Uint8Array(t.buffer,t.byteOffset,t.byteLength);n.set(e,r),r+=t.byteLength}return n}(e).buffer}constructor(){this.encoder=new TextEncoder,this._pieces=[],this._parts=[]}}function i(e){return new o(e).unpack()}function s(e){let t=new a,n=t.pack(e);return n instanceof Promise?n.then(()=>t.getBuffer()):t.getBuffer()}class o{unpack(){let e,t=this.unpack_uint8();if(t<128)return t;if((224^t)<32)return(224^t)-32;if((e=160^t)<=15)return this.unpack_raw(e);if((e=176^t)<=15)return this.unpack_string(e);if((e=144^t)<=15)return this.unpack_array(e);if((e=128^t)<=15)return this.unpack_map(e);switch(t){case 192:return null;case 193:case 212:case 213:case 214:case 215:return;case 194:return!1;case 195:return!0;case 202:return this.unpack_float();case 203:return this.unpack_double();case 204:return this.unpack_uint8();case 205:return this.unpack_uint16();case 206:return this.unpack_uint32();case 207:return this.unpack_uint64();case 208:return this.unpack_int8();case 209:return this.unpack_int16();case 210:return this.unpack_int32();case 211:return this.unpack_int64();case 216:return e=this.unpack_uint16(),this.unpack_string(e);case 217:return e=this.unpack_uint32(),this.unpack_string(e);case 218:return e=this.unpack_uint16(),this.unpack_raw(e);case 219:return e=this.unpack_uint32(),this.unpack_raw(e);case 220:return e=this.unpack_uint16(),this.unpack_array(e);case 221:return e=this.unpack_uint32(),this.unpack_array(e);case 222:return e=this.unpack_uint16(),this.unpack_map(e);case 223:return e=this.unpack_uint32(),this.unpack_map(e)}}unpack_uint8(){let e=255&this.dataView[this.index];return this.index++,e}unpack_uint16(){let e=this.read(2),t=(255&e[0])*256+(255&e[1]);return this.index+=2,t}unpack_uint32(){let e=this.read(4),t=((256*e[0]+e[1])*256+e[2])*256+e[3];return this.index+=4,t}unpack_uint64(){let e=this.read(8),t=((((((256*e[0]+e[1])*256+e[2])*256+e[3])*256+e[4])*256+e[5])*256+e[6])*256+e[7];return this.index+=8,t}unpack_int8(){let e=this.unpack_uint8();return e<128?e:e-256}unpack_int16(){let e=this.unpack_uint16();return e<32768?e:e-65536}unpack_int32(){let e=this.unpack_uint32();return e<0x80000000?e:e-0x100000000}unpack_int64(){let e=this.unpack_uint64();return e<0x8000000000000000?e:e-0xffffffffffffffff}unpack_raw(e){if(this.length<this.index+e)throw Error(`BinaryPackFailure: index is out of range ${this.index} ${e} ${this.length}`);let t=this.dataBuffer.slice(this.index,this.index+e);return this.index+=e,t}unpack_string(e){let t,n,r=this.read(e),i=0,s="";for(;i<e;)(t=r[i])<160?(n=t,i++):(192^t)<32?(n=(31&t)<<6|63&r[i+1],i+=2):(224^t)<16?(n=(15&t)<<12|(63&r[i+1])<<6|63&r[i+2],i+=3):(n=(7&t)<<18|(63&r[i+1])<<12|(63&r[i+2])<<6|63&r[i+3],i+=4),s+=String.fromCodePoint(n);return this.index+=e,s}unpack_array(e){let t=Array(e);for(let n=0;n<e;n++)t[n]=this.unpack();return t}unpack_map(e){let t={};for(let n=0;n<e;n++)t[this.unpack()]=this.unpack();return t}unpack_float(){let e=this.unpack_uint32();return(0==e>>31?1:-1)*(8388607&e|8388608)*2**((e>>23&255)-127-23)}unpack_double(){let e=this.unpack_uint32(),t=this.unpack_uint32(),n=(e>>20&2047)-1023;return(0==e>>31?1:-1)*((1048575&e|1048576)*2**(n-20)+t*2**(n-52))}read(e){let t=this.index;if(t+e<=this.length)return this.dataView.subarray(t,t+e);throw Error("BinaryPackFailure: read index out of range")}constructor(e){this.index=0,this.dataBuffer=e,this.dataView=new Uint8Array(this.dataBuffer),this.length=this.dataBuffer.byteLength}}class a{getBuffer(){return this._bufferBuilder.toArrayBuffer()}pack(e){if("string"==typeof e)this.pack_string(e);else if("number"==typeof e)Math.floor(e)===e?this.pack_integer(e):this.pack_double(e);else if("boolean"==typeof e)!0===e?this._bufferBuilder.append(195):!1===e&&this._bufferBuilder.append(194);else if(void 0===e)this._bufferBuilder.append(192);else if("object"==typeof e)if(null===e)this._bufferBuilder.append(192);else{let t=e.constructor;if(e instanceof Array){let t=this.pack_array(e);if(t instanceof Promise)return t.then(()=>this._bufferBuilder.flush())}else if(e instanceof ArrayBuffer)this.pack_bin(new Uint8Array(e));else if("BYTES_PER_ELEMENT"in e)this.pack_bin(new Uint8Array(e.buffer,e.byteOffset,e.byteLength));else if(e instanceof Date)this.pack_string(e.toString());else if(e instanceof Blob)return e.arrayBuffer().then(e=>{this.pack_bin(new Uint8Array(e)),this._bufferBuilder.flush()});else if(t==Object||t.toString().startsWith("class")){let t=this.pack_object(e);if(t instanceof Promise)return t.then(()=>this._bufferBuilder.flush())}else throw Error(`Type "${t.toString()}" not yet supported`)}else throw Error(`Type "${typeof e}" not yet supported`);this._bufferBuilder.flush()}pack_bin(e){let t=e.length;if(t<=15)this.pack_uint8(160+t);else if(t<=65535)this._bufferBuilder.append(218),this.pack_uint16(t);else if(t<=0xffffffff)this._bufferBuilder.append(219),this.pack_uint32(t);else throw Error("Invalid length");this._bufferBuilder.append_buffer(e)}pack_string(e){let t=this._textEncoder.encode(e),n=t.length;if(n<=15)this.pack_uint8(176+n);else if(n<=65535)this._bufferBuilder.append(216),this.pack_uint16(n);else if(n<=0xffffffff)this._bufferBuilder.append(217),this.pack_uint32(n);else throw Error("Invalid length");this._bufferBuilder.append_buffer(t)}pack_array(e){let t=e.length;if(t<=15)this.pack_uint8(144+t);else if(t<=65535)this._bufferBuilder.append(220),this.pack_uint16(t);else if(t<=0xffffffff)this._bufferBuilder.append(221),this.pack_uint32(t);else throw Error("Invalid length");let n=r=>{if(r<t){let t=this.pack(e[r]);return t instanceof Promise?t.then(()=>n(r+1)):n(r+1)}};return n(0)}pack_integer(e){if(e>=-32&&e<=127)this._bufferBuilder.append(255&e);else if(e>=0&&e<=255)this._bufferBuilder.append(204),this.pack_uint8(e);else if(e>=-128&&e<=127)this._bufferBuilder.append(208),this.pack_int8(e);else if(e>=0&&e<=65535)this._bufferBuilder.append(205),this.pack_uint16(e);else if(e>=-32768&&e<=32767)this._bufferBuilder.append(209),this.pack_int16(e);else if(e>=0&&e<=0xffffffff)this._bufferBuilder.append(206),this.pack_uint32(e);else if(e>=-0x80000000&&e<=0x7fffffff)this._bufferBuilder.append(210),this.pack_int32(e);else if(e>=-0x8000000000000000&&e<=0x8000000000000000)this._bufferBuilder.append(211),this.pack_int64(e);else if(e>=0&&e<=0xffffffffffffffff)this._bufferBuilder.append(207),this.pack_uint64(e);else throw Error("Invalid integer")}pack_double(e){let t=0;e<0&&(t=1,e=-e);let n=Math.floor(Math.log(e)/Math.LN2),r=Math.floor((e/2**n-1)*0x10000000000000),i=t<<31|n+1023<<20|r/0x100000000&1048575;this._bufferBuilder.append(203),this.pack_int32(i),this.pack_int32(r%0x100000000)}pack_object(e){let t=Object.keys(e),n=t.length;if(n<=15)this.pack_uint8(128+n);else if(n<=65535)this._bufferBuilder.append(222),this.pack_uint16(n);else if(n<=0xffffffff)this._bufferBuilder.append(223),this.pack_uint32(n);else throw Error("Invalid length");let r=n=>{if(n<t.length){let i=t[n];if(e.hasOwnProperty(i)){this.pack(i);let t=this.pack(e[i]);if(t instanceof Promise)return t.then(()=>r(n+1))}return r(n+1)}};return r(0)}pack_uint8(e){this._bufferBuilder.append(e)}pack_uint16(e){this._bufferBuilder.append(e>>8),this._bufferBuilder.append(255&e)}pack_uint32(e){let t=0|e;this._bufferBuilder.append((0xff000000&t)>>>24),this._bufferBuilder.append((0xff0000&t)>>>16),this._bufferBuilder.append((65280&t)>>>8),this._bufferBuilder.append(255&t)}pack_uint64(e){let t=e/0x100000000,n=e%0x100000000;this._bufferBuilder.append((0xff000000&t)>>>24),this._bufferBuilder.append((0xff0000&t)>>>16),this._bufferBuilder.append((65280&t)>>>8),this._bufferBuilder.append(255&t),this._bufferBuilder.append((0xff000000&n)>>>24),this._bufferBuilder.append((0xff0000&n)>>>16),this._bufferBuilder.append((65280&n)>>>8),this._bufferBuilder.append(255&n)}pack_int8(e){this._bufferBuilder.append(255&e)}pack_int16(e){this._bufferBuilder.append((65280&e)>>8),this._bufferBuilder.append(255&e)}pack_int32(e){this._bufferBuilder.append(e>>>24&255),this._bufferBuilder.append((0xff0000&e)>>>16),this._bufferBuilder.append((65280&e)>>>8),this._bufferBuilder.append(255&e)}pack_int64(e){let t=Math.floor(e/0x100000000),n=e%0x100000000;this._bufferBuilder.append((0xff000000&t)>>>24),this._bufferBuilder.append((0xff0000&t)>>>16),this._bufferBuilder.append((65280&t)>>>8),this._bufferBuilder.append(255&t),this._bufferBuilder.append((0xff000000&n)>>>24),this._bufferBuilder.append((0xff0000&n)>>>16),this._bufferBuilder.append((65280&n)>>>8),this._bufferBuilder.append(255&n)}constructor(){this._bufferBuilder=new r,this._textEncoder=new TextEncoder}}"use strict";let c=!0,p=!0;function d(e,t,n){let r=e.match(t);return r&&r.length>=n&&parseInt(r[n],10)}function l(e,t,n){if(!e.RTCPeerConnection)return;let r=e.RTCPeerConnection.prototype,i=r.addEventListener;r.addEventListener=function(e,r){if(e!==t)return i.apply(this,arguments);let s=e=>{let t=n(e);t&&(r.handleEvent?r.handleEvent(t):r(t))};return this._eventMap=this._eventMap||{},this._eventMap[t]||(this._eventMap[t]=new Map),this._eventMap[t].set(r,s),i.apply(this,[e,s])};let s=r.removeEventListener;r.removeEventListener=function(e,n){if(e!==t||!this._eventMap||!this._eventMap[t]||!this._eventMap[t].has(n))return s.apply(this,arguments);let r=this._eventMap[t].get(n);return this._eventMap[t].delete(n),0===this._eventMap[t].size&&delete this._eventMap[t],0===Object.keys(this._eventMap).length&&delete this._eventMap,s.apply(this,[e,r])},Object.defineProperty(r,"on"+t,{get(){return this["_on"+t]},set(e){this["_on"+t]&&(this.removeEventListener(t,this["_on"+t]),delete this["_on"+t]),e&&this.addEventListener(t,this["_on"+t]=e)},enumerable:!0,configurable:!0})}function h(e){return"boolean"!=typeof e?Error("Argument type: "+typeof e+". Please use a boolean."):(c=e,e?"adapter.js logging disabled":"adapter.js logging enabled")}function u(e){return"boolean"!=typeof e?Error("Argument type: "+typeof e+". Please use a boolean."):(p=!e,"adapter.js deprecation warnings "+(e?"disabled":"enabled"))}function f(){"object"==typeof window&&(c||"undefined"!=typeof console&&"function"==typeof console.log&&console.log.apply(console,arguments))}function m(e,t){p&&console.warn(e+" is deprecated, please use "+t+" instead.")}function _(e){return"[object Object]"===Object.prototype.toString.call(e)}function g(e,t,n){let r=n?"outbound-rtp":"inbound-rtp",i=new Map;if(null===t)return i;let s=[];return e.forEach(e=>{"track"===e.type&&e.trackIdentifier===t.id&&s.push(e)}),s.forEach(t=>{e.forEach(n=>{n.type===r&&n.trackId===t.id&&function e(t,n,r){!n||r.has(n.id)||(r.set(n.id,n),Object.keys(n).forEach(i=>{i.endsWith("Id")?e(t,t.get(n[i]),r):i.endsWith("Ids")&&n[i].forEach(n=>{e(t,t.get(n),r)})}))}(e,n,i)})}),i}"use strict";var y={};function C(e,t){let n=e&&e.navigator;if(!n.mediaDevices)return;let r=function(e){if("object"!=typeof e||e.mandatory||e.optional)return e;let t={};return Object.keys(e).forEach(n=>{if("require"===n||"advanced"===n||"mediaSource"===n)return;let r="object"==typeof e[n]?e[n]:{ideal:e[n]};void 0!==r.exact&&"number"==typeof r.exact&&(r.min=r.max=r.exact);let i=function(e,t){return e?e+t.charAt(0).toUpperCase()+t.slice(1):"deviceId"===t?"sourceId":t};if(void 0!==r.ideal){t.optional=t.optional||[];let e={};"number"==typeof r.ideal?(e[i("min",n)]=r.ideal,t.optional.push(e),(e={})[i("max",n)]=r.ideal):e[i("",n)]=r.ideal,t.optional.push(e)}void 0!==r.exact&&"number"!=typeof r.exact?(t.mandatory=t.mandatory||{},t.mandatory[i("",n)]=r.exact):["min","max"].forEach(e=>{void 0!==r[e]&&(t.mandatory=t.mandatory||{},t.mandatory[i(e,n)]=r[e])})}),e.advanced&&(t.optional=(t.optional||[]).concat(e.advanced)),t},i=function(e,i){if(t.version>=61)return i(e);if((e=JSON.parse(JSON.stringify(e)))&&"object"==typeof e.audio){let t=function(e,t,n){t in e&&!(n in e)&&(e[n]=e[t],delete e[t])};t((e=JSON.parse(JSON.stringify(e))).audio,"autoGainControl","googAutoGainControl"),t(e.audio,"noiseSuppression","googNoiseSuppression"),e.audio=r(e.audio)}if(e&&"object"==typeof e.video){let s=e.video.facingMode;s=s&&("object"==typeof s?s:{ideal:s});let o=t.version<66;if(s&&("user"===s.exact||"environment"===s.exact||"user"===s.ideal||"environment"===s.ideal)&&!(n.mediaDevices.getSupportedConstraints&&n.mediaDevices.getSupportedConstraints().facingMode&&!o)){let t;if(delete e.video.facingMode,"environment"===s.exact||"environment"===s.ideal?t=["back","rear"]:("user"===s.exact||"user"===s.ideal)&&(t=["front"]),t)return n.mediaDevices.enumerateDevices().then(n=>{let o=(n=n.filter(e=>"videoinput"===e.kind)).find(e=>t.some(t=>e.label.toLowerCase().includes(t)));return!o&&n.length&&t.includes("back")&&(o=n[n.length-1]),o&&(e.video.deviceId=s.exact?{exact:o.deviceId}:{ideal:o.deviceId}),e.video=r(e.video),f("chrome: "+JSON.stringify(e)),i(e)})}e.video=r(e.video)}return f("chrome: "+JSON.stringify(e)),i(e)},s=function(e){return t.version>=64?e:{name:({PermissionDeniedError:"NotAllowedError",PermissionDismissedError:"NotAllowedError",InvalidStateError:"NotAllowedError",DevicesNotFoundError:"NotFoundError",ConstraintNotSatisfiedError:"OverconstrainedError",TrackStartError:"NotReadableError",MediaDeviceFailedDueToShutdown:"NotAllowedError",MediaDeviceKillSwitchOn:"NotAllowedError",TabCaptureError:"AbortError",ScreenCaptureError:"AbortError",DeviceCaptureError:"AbortError"})[e.name]||e.name,message:e.message,constraint:e.constraint||e.constraintName,toString(){return this.name+(this.message&&": ")+this.message}}};if(n.getUserMedia=(function(e,t,r){i(e,e=>{n.webkitGetUserMedia(e,t,e=>{r&&r(s(e))})})}).bind(n),n.mediaDevices.getUserMedia){let e=n.mediaDevices.getUserMedia.bind(n.mediaDevices);n.mediaDevices.getUserMedia=function(t){return i(t,t=>e(t).then(e=>{if(t.audio&&!e.getAudioTracks().length||t.video&&!e.getVideoTracks().length)throw e.getTracks().forEach(e=>{e.stop()}),new DOMException("","NotFoundError");return e},e=>Promise.reject(s(e))))}}}"use strict";function v(e){e.MediaStream=e.MediaStream||e.webkitMediaStream}function b(e){if("object"!=typeof e||!e.RTCPeerConnection||"ontrack"in e.RTCPeerConnection.prototype)l(e,"track",e=>(e.transceiver||Object.defineProperty(e,"transceiver",{value:{receiver:e.receiver}}),e));else{Object.defineProperty(e.RTCPeerConnection.prototype,"ontrack",{get(){return this._ontrack},set(e){this._ontrack&&this.removeEventListener("track",this._ontrack),this.addEventListener("track",this._ontrack=e)},enumerable:!0,configurable:!0});let t=e.RTCPeerConnection.prototype.setRemoteDescription;e.RTCPeerConnection.prototype.setRemoteDescription=function(){return this._ontrackpoly||(this._ontrackpoly=t=>{t.stream.addEventListener("addtrack",n=>{let r;r=e.RTCPeerConnection.prototype.getReceivers?this.getReceivers().find(e=>e.track&&e.track.id===n.track.id):{track:n.track};let i=new Event("track");i.track=n.track,i.receiver=r,i.transceiver={receiver:r},i.streams=[t.stream],this.dispatchEvent(i)}),t.stream.getTracks().forEach(n=>{let r;r=e.RTCPeerConnection.prototype.getReceivers?this.getReceivers().find(e=>e.track&&e.track.id===n.id):{track:n};let i=new Event("track");i.track=n,i.receiver=r,i.transceiver={receiver:r},i.streams=[t.stream],this.dispatchEvent(i)})},this.addEventListener("addstream",this._ontrackpoly)),t.apply(this,arguments)}}}function T(e){if("object"==typeof e&&e.RTCPeerConnection&&!("getSenders"in e.RTCPeerConnection.prototype)&&"createDTMFSender"in e.RTCPeerConnection.prototype){let t=function(e,t){return{track:t,get dtmf(){return void 0===this._dtmf&&("audio"===t.kind?this._dtmf=e.createDTMFSender(t):this._dtmf=null),this._dtmf},_pc:e}};if(!e.RTCPeerConnection.prototype.getSenders){e.RTCPeerConnection.prototype.getSenders=function(){return this._senders=this._senders||[],this._senders.slice()};let n=e.RTCPeerConnection.prototype.addTrack;e.RTCPeerConnection.prototype.addTrack=function(e,r){let i=n.apply(this,arguments);return i||(i=t(this,e),this._senders.push(i)),i};let r=e.RTCPeerConnection.prototype.removeTrack;e.RTCPeerConnection.prototype.removeTrack=function(e){r.apply(this,arguments);let t=this._senders.indexOf(e);-1!==t&&this._senders.splice(t,1)}}let n=e.RTCPeerConnection.prototype.addStream;e.RTCPeerConnection.prototype.addStream=function(e){this._senders=this._senders||[],n.apply(this,[e]),e.getTracks().forEach(e=>{this._senders.push(t(this,e))})};let r=e.RTCPeerConnection.prototype.removeStream;e.RTCPeerConnection.prototype.removeStream=function(e){this._senders=this._senders||[],r.apply(this,[e]),e.getTracks().forEach(e=>{let t=this._senders.find(t=>t.track===e);t&&this._senders.splice(this._senders.indexOf(t),1)})}}else if("object"==typeof e&&e.RTCPeerConnection&&"getSenders"in e.RTCPeerConnection.prototype&&"createDTMFSender"in e.RTCPeerConnection.prototype&&e.RTCRtpSender&&!("dtmf"in e.RTCRtpSender.prototype)){let t=e.RTCPeerConnection.prototype.getSenders;e.RTCPeerConnection.prototype.getSenders=function(){let e=t.apply(this,[]);return e.forEach(e=>e._pc=this),e},Object.defineProperty(e.RTCRtpSender.prototype,"dtmf",{get(){return void 0===this._dtmf&&("audio"===this.track.kind?this._dtmf=this._pc.createDTMFSender(this.track):this._dtmf=null),this._dtmf}})}}function S(e){if(!("object"==typeof e&&e.RTCPeerConnection&&e.RTCRtpSender&&e.RTCRtpReceiver))return;if(!("getStats"in e.RTCRtpSender.prototype)){let t=e.RTCPeerConnection.prototype.getSenders;t&&(e.RTCPeerConnection.prototype.getSenders=function(){let e=t.apply(this,[]);return e.forEach(e=>e._pc=this),e});let n=e.RTCPeerConnection.prototype.addTrack;n&&(e.RTCPeerConnection.prototype.addTrack=function(){let e=n.apply(this,arguments);return e._pc=this,e}),e.RTCRtpSender.prototype.getStats=function(){let e=this;return this._pc.getStats().then(t=>g(t,e.track,!0))}}if(!("getStats"in e.RTCRtpReceiver.prototype)){let t=e.RTCPeerConnection.prototype.getReceivers;t&&(e.RTCPeerConnection.prototype.getReceivers=function(){let e=t.apply(this,[]);return e.forEach(e=>e._pc=this),e}),l(e,"track",e=>(e.receiver._pc=e.srcElement,e)),e.RTCRtpReceiver.prototype.getStats=function(){let e=this;return this._pc.getStats().then(t=>g(t,e.track,!1))}}if(!("getStats"in e.RTCRtpSender.prototype&&"getStats"in e.RTCRtpReceiver.prototype))return;let t=e.RTCPeerConnection.prototype.getStats;e.RTCPeerConnection.prototype.getStats=function(){if(arguments.length>0&&arguments[0]instanceof e.MediaStreamTrack){let e,t,n,r=arguments[0];return(this.getSenders().forEach(t=>{t.track===r&&(e?n=!0:e=t)}),this.getReceivers().forEach(e=>(e.track===r&&(t?n=!0:t=e),e.track===r)),n||e&&t)?Promise.reject(new DOMException("There are more than one sender or receiver for the track.","InvalidAccessError")):e?e.getStats():t?t.getStats():Promise.reject(new DOMException("There is no sender or receiver for the track.","InvalidAccessError"))}return t.apply(this,arguments)}}function k(e){e.RTCPeerConnection.prototype.getLocalStreams=function(){return this._shimmedLocalStreams=this._shimmedLocalStreams||{},Object.keys(this._shimmedLocalStreams).map(e=>this._shimmedLocalStreams[e][0])};let t=e.RTCPeerConnection.prototype.addTrack;e.RTCPeerConnection.prototype.addTrack=function(e,n){if(!n)return t.apply(this,arguments);this._shimmedLocalStreams=this._shimmedLocalStreams||{};let r=t.apply(this,arguments);return this._shimmedLocalStreams[n.id]?-1===this._shimmedLocalStreams[n.id].indexOf(r)&&this._shimmedLocalStreams[n.id].push(r):this._shimmedLocalStreams[n.id]=[n,r],r};let n=e.RTCPeerConnection.prototype.addStream;e.RTCPeerConnection.prototype.addStream=function(e){this._shimmedLocalStreams=this._shimmedLocalStreams||{},e.getTracks().forEach(e=>{if(this.getSenders().find(t=>t.track===e))throw new DOMException("Track already exists.","InvalidAccessError")});let t=this.getSenders();n.apply(this,arguments);let r=this.getSenders().filter(e=>-1===t.indexOf(e));this._shimmedLocalStreams[e.id]=[e].concat(r)};let r=e.RTCPeerConnection.prototype.removeStream;e.RTCPeerConnection.prototype.removeStream=function(e){return this._shimmedLocalStreams=this._shimmedLocalStreams||{},delete this._shimmedLocalStreams[e.id],r.apply(this,arguments)};let i=e.RTCPeerConnection.prototype.removeTrack;e.RTCPeerConnection.prototype.removeTrack=function(e){return this._shimmedLocalStreams=this._shimmedLocalStreams||{},e&&Object.keys(this._shimmedLocalStreams).forEach(t=>{let n=this._shimmedLocalStreams[t].indexOf(e);-1!==n&&this._shimmedLocalStreams[t].splice(n,1),1===this._shimmedLocalStreams[t].length&&delete this._shimmedLocalStreams[t]}),i.apply(this,arguments)}}function R(e,t){if(!e.RTCPeerConnection)return;if(e.RTCPeerConnection.prototype.addTrack&&t.version>=65)return k(e);let n=e.RTCPeerConnection.prototype.getLocalStreams;e.RTCPeerConnection.prototype.getLocalStreams=function(){let e=n.apply(this);return this._reverseStreams=this._reverseStreams||{},e.map(e=>this._reverseStreams[e.id])};let r=e.RTCPeerConnection.prototype.addStream;e.RTCPeerConnection.prototype.addStream=function(t){if(this._streams=this._streams||{},this._reverseStreams=this._reverseStreams||{},t.getTracks().forEach(e=>{if(this.getSenders().find(t=>t.track===e))throw new DOMException("Track already exists.","InvalidAccessError")}),!this._reverseStreams[t.id]){let n=new e.MediaStream(t.getTracks());this._streams[t.id]=n,this._reverseStreams[n.id]=t,t=n}r.apply(this,[t])};let i=e.RTCPeerConnection.prototype.removeStream;function s(e,t){let n=t.sdp;return Object.keys(e._reverseStreams||[]).forEach(t=>{let r=e._reverseStreams[t],i=e._streams[r.id];n=n.replace(RegExp(i.id,"g"),r.id)}),new RTCSessionDescription({type:t.type,sdp:n})}e.RTCPeerConnection.prototype.removeStream=function(e){this._streams=this._streams||{},this._reverseStreams=this._reverseStreams||{},i.apply(this,[this._streams[e.id]||e]),delete this._reverseStreams[this._streams[e.id]?this._streams[e.id].id:e.id],delete this._streams[e.id]},e.RTCPeerConnection.prototype.addTrack=function(t,n){if("closed"===this.signalingState)throw new DOMException("The RTCPeerConnection's signalingState is 'closed'.","InvalidStateError");let r=[].slice.call(arguments,1);if(1!==r.length||!r[0].getTracks().find(e=>e===t))throw new DOMException("The adapter.js addTrack polyfill only supports a single  stream which is associated with the specified track.","NotSupportedError");if(this.getSenders().find(e=>e.track===t))throw new DOMException("Track already exists.","InvalidAccessError");this._streams=this._streams||{},this._reverseStreams=this._reverseStreams||{};let i=this._streams[n.id];if(i)i.addTrack(t),Promise.resolve().then(()=>{this.dispatchEvent(new Event("negotiationneeded"))});else{let r=new e.MediaStream([t]);this._streams[n.id]=r,this._reverseStreams[r.id]=n,this.addStream(r)}return this.getSenders().find(e=>e.track===t)},["createOffer","createAnswer"].forEach(function(t){let n=e.RTCPeerConnection.prototype[t];e.RTCPeerConnection.prototype[t]=({[t](){let e=arguments,t=arguments.length&&"function"==typeof arguments[0];return t?n.apply(this,[t=>{let n=s(this,t);e[0].apply(null,[n])},t=>{e[1]&&e[1].apply(null,t)},arguments[2]]):n.apply(this,arguments).then(e=>s(this,e))}})[t]});let o=e.RTCPeerConnection.prototype.setLocalDescription;e.RTCPeerConnection.prototype.setLocalDescription=function(){var e,t;let n;return arguments.length&&arguments[0].type?(arguments[0]=(e=this,t=arguments[0],n=t.sdp,Object.keys(e._reverseStreams||[]).forEach(t=>{let r=e._reverseStreams[t],i=e._streams[r.id];n=n.replace(RegExp(r.id,"g"),i.id)}),new RTCSessionDescription({type:t.type,sdp:n})),o.apply(this,arguments)):o.apply(this,arguments)};let a=Object.getOwnPropertyDescriptor(e.RTCPeerConnection.prototype,"localDescription");Object.defineProperty(e.RTCPeerConnection.prototype,"localDescription",{get(){let e=a.get.apply(this);return""===e.type?e:s(this,e)}}),e.RTCPeerConnection.prototype.removeTrack=function(e){let t;if("closed"===this.signalingState)throw new DOMException("The RTCPeerConnection's signalingState is 'closed'.","InvalidStateError");if(!e._pc)throw new DOMException("Argument 1 of RTCPeerConnection.removeTrack does not implement interface RTCRtpSender.","TypeError");if(e._pc!==this)throw new DOMException("Sender was not created by this connection.","InvalidAccessError");this._streams=this._streams||{},Object.keys(this._streams).forEach(n=>{this._streams[n].getTracks().find(t=>e.track===t)&&(t=this._streams[n])}),t&&(1===t.getTracks().length?this.removeStream(this._reverseStreams[t.id]):t.removeTrack(e.track),this.dispatchEvent(new Event("negotiationneeded")))}}function P(e,t){!e.RTCPeerConnection&&e.webkitRTCPeerConnection&&(e.RTCPeerConnection=e.webkitRTCPeerConnection),e.RTCPeerConnection&&t.version<53&&["setLocalDescription","setRemoteDescription","addIceCandidate"].forEach(function(t){let n=e.RTCPeerConnection.prototype[t];e.RTCPeerConnection.prototype[t]=({[t](){return arguments[0]=new("addIceCandidate"===t?e.RTCIceCandidate:e.RTCSessionDescription)(arguments[0]),n.apply(this,arguments)}})[t]})}function w(e,t){l(e,"negotiationneeded",e=>{let n=e.target;if(!(t.version<72)&&(!n.getConfiguration||"plan-b"!==n.getConfiguration().sdpSemantics)||"stable"===n.signalingState)return e})}"use strict";e(y,"shimMediaStream",()=>v),e(y,"shimOnTrack",()=>b),e(y,"shimGetSendersWithDtmf",()=>T),e(y,"shimSenderReceiverGetStats",()=>S),e(y,"shimAddTrackRemoveTrackWithNative",()=>k),e(y,"shimAddTrackRemoveTrack",()=>R),e(y,"shimPeerConnection",()=>P),e(y,"fixNegotiationNeeded",()=>w),e(y,"shimGetUserMedia",()=>C);var E={};function x(e,t){let n=e&&e.navigator,r=e&&e.MediaStreamTrack;if(n.getUserMedia=function(e,t,r){m("navigator.getUserMedia","navigator.mediaDevices.getUserMedia"),n.mediaDevices.getUserMedia(e).then(t,r)},!(t.version>55&&"autoGainControl"in n.mediaDevices.getSupportedConstraints())){let e=function(e,t,n){t in e&&!(n in e)&&(e[n]=e[t],delete e[t])},t=n.mediaDevices.getUserMedia.bind(n.mediaDevices);if(n.mediaDevices.getUserMedia=function(n){return"object"==typeof n&&"object"==typeof n.audio&&(e((n=JSON.parse(JSON.stringify(n))).audio,"autoGainControl","mozAutoGainControl"),e(n.audio,"noiseSuppression","mozNoiseSuppression")),t(n)},r&&r.prototype.getSettings){let t=r.prototype.getSettings;r.prototype.getSettings=function(){let n=t.apply(this,arguments);return e(n,"mozAutoGainControl","autoGainControl"),e(n,"mozNoiseSuppression","noiseSuppression"),n}}if(r&&r.prototype.applyConstraints){let t=r.prototype.applyConstraints;r.prototype.applyConstraints=function(n){return"audio"===this.kind&&"object"==typeof n&&(e(n=JSON.parse(JSON.stringify(n)),"autoGainControl","mozAutoGainControl"),e(n,"noiseSuppression","mozNoiseSuppression")),t.apply(this,[n])}}}}"use strict";function D(e,t){e.navigator.mediaDevices&&"getDisplayMedia"in e.navigator.mediaDevices||e.navigator.mediaDevices&&(e.navigator.mediaDevices.getDisplayMedia=function(n){if(!(n&&n.video)){let e=new DOMException("getDisplayMedia without video constraints is undefined");return e.name="NotFoundError",e.code=8,Promise.reject(e)}return!0===n.video?n.video={mediaSource:t}:n.video.mediaSource=t,e.navigator.mediaDevices.getUserMedia(n)})}"use strict";function I(e){"object"==typeof e&&e.RTCTrackEvent&&"receiver"in e.RTCTrackEvent.prototype&&!("transceiver"in e.RTCTrackEvent.prototype)&&Object.defineProperty(e.RTCTrackEvent.prototype,"transceiver",{get(){return{receiver:this.receiver}}})}function M(e,t){if("object"!=typeof e||!(e.RTCPeerConnection||e.mozRTCPeerConnection))return;!e.RTCPeerConnection&&e.mozRTCPeerConnection&&(e.RTCPeerConnection=e.mozRTCPeerConnection),t.version<53&&["setLocalDescription","setRemoteDescription","addIceCandidate"].forEach(function(t){let n=e.RTCPeerConnection.prototype[t];e.RTCPeerConnection.prototype[t]=({[t](){return arguments[0]=new("addIceCandidate"===t?e.RTCIceCandidate:e.RTCSessionDescription)(arguments[0]),n.apply(this,arguments)}})[t]});let n={inboundrtp:"inbound-rtp",outboundrtp:"outbound-rtp",candidatepair:"candidate-pair",localcandidate:"local-candidate",remotecandidate:"remote-candidate"},r=e.RTCPeerConnection.prototype.getStats;e.RTCPeerConnection.prototype.getStats=function(){let[e,i,s]=arguments;return r.apply(this,[e||null]).then(e=>{if(t.version<53&&!i)try{e.forEach(e=>{e.type=n[e.type]||e.type})}catch(t){if("TypeError"!==t.name)throw t;e.forEach((t,r)=>{e.set(r,Object.assign({},t,{type:n[t.type]||t.type}))})}return e}).then(i,s)}}function O(e){if(!("object"==typeof e&&e.RTCPeerConnection&&e.RTCRtpSender)||e.RTCRtpSender&&"getStats"in e.RTCRtpSender.prototype)return;let t=e.RTCPeerConnection.prototype.getSenders;t&&(e.RTCPeerConnection.prototype.getSenders=function(){let e=t.apply(this,[]);return e.forEach(e=>e._pc=this),e});let n=e.RTCPeerConnection.prototype.addTrack;n&&(e.RTCPeerConnection.prototype.addTrack=function(){let e=n.apply(this,arguments);return e._pc=this,e}),e.RTCRtpSender.prototype.getStats=function(){return this.track?this._pc.getStats(this.track):Promise.resolve(new Map)}}function L(e){if(!("object"==typeof e&&e.RTCPeerConnection&&e.RTCRtpSender)||e.RTCRtpSender&&"getStats"in e.RTCRtpReceiver.prototype)return;let t=e.RTCPeerConnection.prototype.getReceivers;t&&(e.RTCPeerConnection.prototype.getReceivers=function(){let e=t.apply(this,[]);return e.forEach(e=>e._pc=this),e}),l(e,"track",e=>(e.receiver._pc=e.srcElement,e)),e.RTCRtpReceiver.prototype.getStats=function(){return this._pc.getStats(this.track)}}function A(e){!e.RTCPeerConnection||"removeStream"in e.RTCPeerConnection.prototype||(e.RTCPeerConnection.prototype.removeStream=function(e){m("removeStream","removeTrack"),this.getSenders().forEach(t=>{t.track&&e.getTracks().includes(t.track)&&this.removeTrack(t)})})}function j(e){e.DataChannel&&!e.RTCDataChannel&&(e.RTCDataChannel=e.DataChannel)}function B(e){if(!("object"==typeof e&&e.RTCPeerConnection))return;let t=e.RTCPeerConnection.prototype.addTransceiver;t&&(e.RTCPeerConnection.prototype.addTransceiver=function(){this.setParametersPromises=[];let e=arguments[1]&&arguments[1].sendEncodings;void 0===e&&(e=[]);let n=(e=[...e]).length>0;n&&e.forEach(e=>{if("rid"in e&&!/^[a-z0-9]{0,16}$/i.test(e.rid))throw TypeError("Invalid RID value provided.");if("scaleResolutionDownBy"in e&&!(parseFloat(e.scaleResolutionDownBy)>=1))throw RangeError("scale_resolution_down_by must be >= 1.0");if("maxFramerate"in e&&!(parseFloat(e.maxFramerate)>=0))throw RangeError("max_framerate must be >= 0.0")});let r=t.apply(this,arguments);if(n){let{sender:t}=r,n=t.getParameters();"encodings"in n&&(1!==n.encodings.length||0!==Object.keys(n.encodings[0]).length)||(n.encodings=e,t.sendEncodings=e,this.setParametersPromises.push(t.setParameters(n).then(()=>{delete t.sendEncodings}).catch(()=>{delete t.sendEncodings})))}return r})}function U(e){if(!("object"==typeof e&&e.RTCRtpSender))return;let t=e.RTCRtpSender.prototype.getParameters;t&&(e.RTCRtpSender.prototype.getParameters=function(){let e=t.apply(this,arguments);return"encodings"in e||(e.encodings=[].concat(this.sendEncodings||[{}])),e})}function F(e){if(!("object"==typeof e&&e.RTCPeerConnection))return;let t=e.RTCPeerConnection.prototype.createOffer;e.RTCPeerConnection.prototype.createOffer=function(){return this.setParametersPromises&&this.setParametersPromises.length?Promise.all(this.setParametersPromises).then(()=>t.apply(this,arguments)).finally(()=>{this.setParametersPromises=[]}):t.apply(this,arguments)}}function N(e){if(!("object"==typeof e&&e.RTCPeerConnection))return;let t=e.RTCPeerConnection.prototype.createAnswer;e.RTCPeerConnection.prototype.createAnswer=function(){return this.setParametersPromises&&this.setParametersPromises.length?Promise.all(this.setParametersPromises).then(()=>t.apply(this,arguments)).finally(()=>{this.setParametersPromises=[]}):t.apply(this,arguments)}}"use strict";e(E,"shimOnTrack",()=>I),e(E,"shimPeerConnection",()=>M),e(E,"shimSenderGetStats",()=>O),e(E,"shimReceiverGetStats",()=>L),e(E,"shimRemoveStream",()=>A),e(E,"shimRTCDataChannel",()=>j),e(E,"shimAddTransceiver",()=>B),e(E,"shimGetParameters",()=>U),e(E,"shimCreateOffer",()=>F),e(E,"shimCreateAnswer",()=>N),e(E,"shimGetUserMedia",()=>x),e(E,"shimGetDisplayMedia",()=>D);var z={};function $(e){if("object"==typeof e&&e.RTCPeerConnection){if("getLocalStreams"in e.RTCPeerConnection.prototype||(e.RTCPeerConnection.prototype.getLocalStreams=function(){return this._localStreams||(this._localStreams=[]),this._localStreams}),!("addStream"in e.RTCPeerConnection.prototype)){let t=e.RTCPeerConnection.prototype.addTrack;e.RTCPeerConnection.prototype.addStream=function(e){this._localStreams||(this._localStreams=[]),this._localStreams.includes(e)||this._localStreams.push(e),e.getAudioTracks().forEach(n=>t.call(this,n,e)),e.getVideoTracks().forEach(n=>t.call(this,n,e))},e.RTCPeerConnection.prototype.addTrack=function(e,...n){return n&&n.forEach(e=>{this._localStreams?this._localStreams.includes(e)||this._localStreams.push(e):this._localStreams=[e]}),t.apply(this,arguments)}}"removeStream"in e.RTCPeerConnection.prototype||(e.RTCPeerConnection.prototype.removeStream=function(e){this._localStreams||(this._localStreams=[]);let t=this._localStreams.indexOf(e);if(-1===t)return;this._localStreams.splice(t,1);let n=e.getTracks();this.getSenders().forEach(e=>{n.includes(e.track)&&this.removeTrack(e)})})}}function V(e){if("object"==typeof e&&e.RTCPeerConnection&&("getRemoteStreams"in e.RTCPeerConnection.prototype||(e.RTCPeerConnection.prototype.getRemoteStreams=function(){return this._remoteStreams?this._remoteStreams:[]}),!("onaddstream"in e.RTCPeerConnection.prototype))){Object.defineProperty(e.RTCPeerConnection.prototype,"onaddstream",{get(){return this._onaddstream},set(e){this._onaddstream&&(this.removeEventListener("addstream",this._onaddstream),this.removeEventListener("track",this._onaddstreampoly)),this.addEventListener("addstream",this._onaddstream=e),this.addEventListener("track",this._onaddstreampoly=e=>{e.streams.forEach(e=>{if(this._remoteStreams||(this._remoteStreams=[]),this._remoteStreams.includes(e))return;this._remoteStreams.push(e);let t=new Event("addstream");t.stream=e,this.dispatchEvent(t)})})}});let t=e.RTCPeerConnection.prototype.setRemoteDescription;e.RTCPeerConnection.prototype.setRemoteDescription=function(){let e=this;return this._onaddstreampoly||this.addEventListener("track",this._onaddstreampoly=function(t){t.streams.forEach(t=>{if(e._remoteStreams||(e._remoteStreams=[]),e._remoteStreams.indexOf(t)>=0)return;e._remoteStreams.push(t);let n=new Event("addstream");n.stream=t,e.dispatchEvent(n)})}),t.apply(e,arguments)}}}function G(e){if("object"!=typeof e||!e.RTCPeerConnection)return;let t=e.RTCPeerConnection.prototype,n=t.createOffer,r=t.createAnswer,i=t.setLocalDescription,s=t.setRemoteDescription,o=t.addIceCandidate;t.createOffer=function(e,t){let r=arguments.length>=2?arguments[2]:arguments[0],i=n.apply(this,[r]);return t?(i.then(e,t),Promise.resolve()):i},t.createAnswer=function(e,t){let n=arguments.length>=2?arguments[2]:arguments[0],i=r.apply(this,[n]);return t?(i.then(e,t),Promise.resolve()):i};let a=function(e,t,n){let r=i.apply(this,[e]);return n?(r.then(t,n),Promise.resolve()):r};t.setLocalDescription=a,t.setRemoteDescription=a=function(e,t,n){let r=s.apply(this,[e]);return n?(r.then(t,n),Promise.resolve()):r},t.addIceCandidate=function(e,t,n){let r=o.apply(this,[e]);return n?(r.then(t,n),Promise.resolve()):r}}function J(e){let t=e&&e.navigator;if(t.mediaDevices&&t.mediaDevices.getUserMedia){let e=t.mediaDevices,n=e.getUserMedia.bind(e);t.mediaDevices.getUserMedia=e=>n(W(e))}!t.getUserMedia&&t.mediaDevices&&t.mediaDevices.getUserMedia&&(t.getUserMedia=(function(e,n,r){t.mediaDevices.getUserMedia(e).then(n,r)}).bind(t))}function W(e){return e&&void 0!==e.video?Object.assign({},e,{video:function e(t){return _(t)?Object.keys(t).reduce(function(n,r){let i=_(t[r]),s=i?e(t[r]):t[r],o=i&&!Object.keys(s).length;return void 0===s||o?n:Object.assign(n,{[r]:s})},{}):t}(e.video)}):e}function Y(e){if(!e.RTCPeerConnection)return;let t=e.RTCPeerConnection;e.RTCPeerConnection=function(e,n){if(e&&e.iceServers){let t=[];for(let n=0;n<e.iceServers.length;n++){let r=e.iceServers[n];void 0===r.urls&&r.url?(m("RTCIceServer.url","RTCIceServer.urls"),(r=JSON.parse(JSON.stringify(r))).urls=r.url,delete r.url,t.push(r)):t.push(e.iceServers[n])}e.iceServers=t}return new t(e,n)},e.RTCPeerConnection.prototype=t.prototype,"generateCertificate"in t&&Object.defineProperty(e.RTCPeerConnection,"generateCertificate",{get:()=>t.generateCertificate})}function H(e){"object"==typeof e&&e.RTCTrackEvent&&"receiver"in e.RTCTrackEvent.prototype&&!("transceiver"in e.RTCTrackEvent.prototype)&&Object.defineProperty(e.RTCTrackEvent.prototype,"transceiver",{get(){return{receiver:this.receiver}}})}function K(e){let t=e.RTCPeerConnection.prototype.createOffer;e.RTCPeerConnection.prototype.createOffer=function(e){if(e){void 0!==e.offerToReceiveAudio&&(e.offerToReceiveAudio=!!e.offerToReceiveAudio);let t=this.getTransceivers().find(e=>"audio"===e.receiver.track.kind);!1===e.offerToReceiveAudio&&t?"sendrecv"===t.direction?t.setDirection?t.setDirection("sendonly"):t.direction="sendonly":"recvonly"===t.direction&&(t.setDirection?t.setDirection("inactive"):t.direction="inactive"):!0!==e.offerToReceiveAudio||t||this.addTransceiver("audio",{direction:"recvonly"}),void 0!==e.offerToReceiveVideo&&(e.offerToReceiveVideo=!!e.offerToReceiveVideo);let n=this.getTransceivers().find(e=>"video"===e.receiver.track.kind);!1===e.offerToReceiveVideo&&n?"sendrecv"===n.direction?n.setDirection?n.setDirection("sendonly"):n.direction="sendonly":"recvonly"===n.direction&&(n.setDirection?n.setDirection("inactive"):n.direction="inactive"):!0!==e.offerToReceiveVideo||n||this.addTransceiver("video",{direction:"recvonly"})}return t.apply(this,arguments)}}function X(e){"object"!=typeof e||e.AudioContext||(e.AudioContext=e.webkitAudioContext)}e(z,"shimLocalStreamsAPI",()=>$),e(z,"shimRemoteStreamsAPI",()=>V),e(z,"shimCallbacksAPI",()=>G),e(z,"shimGetUserMedia",()=>J),e(z,"shimConstraints",()=>W),e(z,"shimRTCIceServerUrls",()=>Y),e(z,"shimTrackEventTransceiver",()=>H),e(z,"shimCreateOfferLegacy",()=>K),e(z,"shimAudioContext",()=>X);var Q={};"use strict";e(Q,"shimRTCIceCandidate",()=>ee),e(Q,"shimRTCIceCandidateRelayProtocol",()=>et),e(Q,"shimMaxMessageSize",()=>en),e(Q,"shimSendThrowTypeError",()=>er),e(Q,"shimConnectionState",()=>ei),e(Q,"removeExtmapAllowMixed",()=>es),e(Q,"shimAddIceCandidateNullOrEmpty",()=>eo),e(Q,"shimParameterlessSetLocalDescription",()=>ea);var q={};"use strict";let Z={};function ee(e){if(!e.RTCIceCandidate||e.RTCIceCandidate&&"foundation"in e.RTCIceCandidate.prototype)return;let n=e.RTCIceCandidate;e.RTCIceCandidate=function(e){if("object"==typeof e&&e.candidate&&0===e.candidate.indexOf("a=")&&((e=JSON.parse(JSON.stringify(e))).candidate=e.candidate.substring(2)),e.candidate&&e.candidate.length){let r=new n(e),i=t(q).parseCandidate(e.candidate);for(let e in i)e in r||Object.defineProperty(r,e,{value:i[e]});return r.toJSON=function(){return{candidate:r.candidate,sdpMid:r.sdpMid,sdpMLineIndex:r.sdpMLineIndex,usernameFragment:r.usernameFragment}},r}return new n(e)},e.RTCIceCandidate.prototype=n.prototype,l(e,"icecandidate",t=>(t.candidate&&Object.defineProperty(t,"candidate",{value:new e.RTCIceCandidate(t.candidate),writable:"false"}),t))}function et(e){!e.RTCIceCandidate||e.RTCIceCandidate&&"relayProtocol"in e.RTCIceCandidate.prototype||l(e,"icecandidate",e=>{if(e.candidate){let n=t(q).parseCandidate(e.candidate.candidate);"relay"===n.type&&(e.candidate.relayProtocol=({0:"tls",1:"tcp",2:"udp"})[n.priority>>24])}return e})}function en(e,n){if(!e.RTCPeerConnection)return;"sctp"in e.RTCPeerConnection.prototype||Object.defineProperty(e.RTCPeerConnection.prototype,"sctp",{get(){return void 0===this._sctp?null:this._sctp}});let r=function(e){if(!e||!e.sdp)return!1;let n=t(q).splitSections(e.sdp);return n.shift(),n.some(e=>{let n=t(q).parseMLine(e);return n&&"application"===n.kind&&-1!==n.protocol.indexOf("SCTP")})},i=function(e){let t=e.sdp.match(/mozilla...THIS_IS_SDPARTA-(\d+)/);if(null===t||t.length<2)return -1;let n=parseInt(t[1],10);return n!=n?-1:n},s=function(e){let t=65536;return"firefox"===n.browser&&(t=n.version<57?-1===e?16384:0x7ffffff5:n.version<60?57===n.version?65535:65536:0x7ffffff5),t},o=function(e,r){let i=65536;"firefox"===n.browser&&57===n.version&&(i=65535);let s=t(q).matchPrefix(e.sdp,"a=max-message-size:");return s.length>0?i=parseInt(s[0].substring(19),10):"firefox"===n.browser&&-1!==r&&(i=0x7ffffff5),i},a=e.RTCPeerConnection.prototype.setRemoteDescription;e.RTCPeerConnection.prototype.setRemoteDescription=function(){if(this._sctp=null,"chrome"===n.browser&&n.version>=76){let{sdpSemantics:e}=this.getConfiguration();"plan-b"===e&&Object.defineProperty(this,"sctp",{get(){return void 0===this._sctp?null:this._sctp},enumerable:!0,configurable:!0})}if(r(arguments[0])){let e,t=i(arguments[0]),n=s(t),r=o(arguments[0],t);e=0===n&&0===r?Number.POSITIVE_INFINITY:0===n||0===r?Math.max(n,r):Math.min(n,r);let a={};Object.defineProperty(a,"maxMessageSize",{get:()=>e}),this._sctp=a}return a.apply(this,arguments)}}function er(e){if(!(e.RTCPeerConnection&&"createDataChannel"in e.RTCPeerConnection.prototype))return;function t(e,t){let n=e.send;e.send=function(){let r=arguments[0],i=r.length||r.size||r.byteLength;if("open"===e.readyState&&t.sctp&&i>t.sctp.maxMessageSize)throw TypeError("Message too large (can send a maximum of "+t.sctp.maxMessageSize+" bytes)");return n.apply(e,arguments)}}let n=e.RTCPeerConnection.prototype.createDataChannel;e.RTCPeerConnection.prototype.createDataChannel=function(){let e=n.apply(this,arguments);return t(e,this),e},l(e,"datachannel",e=>(t(e.channel,e.target),e))}function ei(e){if(!e.RTCPeerConnection||"connectionState"in e.RTCPeerConnection.prototype)return;let t=e.RTCPeerConnection.prototype;Object.defineProperty(t,"connectionState",{get(){return({completed:"connected",checking:"connecting"})[this.iceConnectionState]||this.iceConnectionState},enumerable:!0,configurable:!0}),Object.defineProperty(t,"onconnectionstatechange",{get(){return this._onconnectionstatechange||null},set(e){this._onconnectionstatechange&&(this.removeEventListener("connectionstatechange",this._onconnectionstatechange),delete this._onconnectionstatechange),e&&this.addEventListener("connectionstatechange",this._onconnectionstatechange=e)},enumerable:!0,configurable:!0}),["setLocalDescription","setRemoteDescription"].forEach(e=>{let n=t[e];t[e]=function(){return this._connectionstatechangepoly||(this._connectionstatechangepoly=e=>{let t=e.target;if(t._lastConnectionState!==t.connectionState){t._lastConnectionState=t.connectionState;let n=new Event("connectionstatechange",e);t.dispatchEvent(n)}return e},this.addEventListener("iceconnectionstatechange",this._connectionstatechangepoly)),n.apply(this,arguments)}})}function es(e,t){if(!e.RTCPeerConnection||"chrome"===t.browser&&t.version>=71||"safari"===t.browser&&t.version>=605)return;let n=e.RTCPeerConnection.prototype.setRemoteDescription;e.RTCPeerConnection.prototype.setRemoteDescription=function(t){if(t&&t.sdp&&-1!==t.sdp.indexOf("\na=extmap-allow-mixed")){let n=t.sdp.split("\n").filter(e=>"a=extmap-allow-mixed"!==e.trim()).join("\n");e.RTCSessionDescription&&t instanceof e.RTCSessionDescription?arguments[0]=new e.RTCSessionDescription({type:t.type,sdp:n}):t.sdp=n}return n.apply(this,arguments)}}function eo(e,t){if(!(e.RTCPeerConnection&&e.RTCPeerConnection.prototype))return;let n=e.RTCPeerConnection.prototype.addIceCandidate;n&&0!==n.length&&(e.RTCPeerConnection.prototype.addIceCandidate=function(){return arguments[0]?("chrome"===t.browser&&t.version<78||"firefox"===t.browser&&t.version<68||"safari"===t.browser)&&arguments[0]&&""===arguments[0].candidate?Promise.resolve():n.apply(this,arguments):(arguments[1]&&arguments[1].apply(null),Promise.resolve())})}function ea(e,t){if(!(e.RTCPeerConnection&&e.RTCPeerConnection.prototype))return;let n=e.RTCPeerConnection.prototype.setLocalDescription;n&&0!==n.length&&(e.RTCPeerConnection.prototype.setLocalDescription=function(){let e=arguments[0]||{};if("object"!=typeof e||e.type&&e.sdp)return n.apply(this,arguments);if(!(e={type:e.type,sdp:e.sdp}).type)switch(this.signalingState){case"stable":case"have-local-offer":case"have-remote-pranswer":e.type="offer";break;default:e.type="answer"}return e.sdp||"offer"!==e.type&&"answer"!==e.type?n.apply(this,[e]):("offer"===e.type?this.createOffer:this.createAnswer).apply(this).then(e=>n.apply(this,[e]))})}"use strict";Z.generateIdentifier=function(){return Math.random().toString(36).substring(2,12)},Z.localCName=Z.generateIdentifier(),Z.splitLines=function(e){return e.trim().split("\n").map(e=>e.trim())},Z.splitSections=function(e){return e.split("\nm=").map((e,t)=>(t>0?"m="+e:e).trim()+"\r\n")},Z.getDescription=function(e){let t=Z.splitSections(e);return t&&t[0]},Z.getMediaSections=function(e){let t=Z.splitSections(e);return t.shift(),t},Z.matchPrefix=function(e,t){return Z.splitLines(e).filter(e=>0===e.indexOf(t))},Z.parseCandidate=function(e){let t,n={foundation:(t=0===e.indexOf("a=candidate:")?e.substring(12).split(" "):e.substring(10).split(" "))[0],component:{1:"rtp",2:"rtcp"}[t[1]]||t[1],protocol:t[2].toLowerCase(),priority:parseInt(t[3],10),ip:t[4],address:t[4],port:parseInt(t[5],10),type:t[7]};for(let e=8;e<t.length;e+=2)switch(t[e]){case"raddr":n.relatedAddress=t[e+1];break;case"rport":n.relatedPort=parseInt(t[e+1],10);break;case"tcptype":n.tcpType=t[e+1];break;case"ufrag":n.ufrag=t[e+1],n.usernameFragment=t[e+1];break;default:void 0===n[t[e]]&&(n[t[e]]=t[e+1])}return n},Z.writeCandidate=function(e){let t=[];t.push(e.foundation);let n=e.component;"rtp"===n?t.push(1):"rtcp"===n?t.push(2):t.push(n),t.push(e.protocol.toUpperCase()),t.push(e.priority),t.push(e.address||e.ip),t.push(e.port);let r=e.type;return t.push("typ"),t.push(r),"host"!==r&&e.relatedAddress&&e.relatedPort&&(t.push("raddr"),t.push(e.relatedAddress),t.push("rport"),t.push(e.relatedPort)),e.tcpType&&"tcp"===e.protocol.toLowerCase()&&(t.push("tcptype"),t.push(e.tcpType)),(e.usernameFragment||e.ufrag)&&(t.push("ufrag"),t.push(e.usernameFragment||e.ufrag)),"candidate:"+t.join(" ")},Z.parseIceOptions=function(e){return e.substring(14).split(" ")},Z.parseRtpMap=function(e){let t=e.substring(9).split(" "),n={payloadType:parseInt(t.shift(),10)};return n.name=(t=t[0].split("/"))[0],n.clockRate=parseInt(t[1],10),n.channels=3===t.length?parseInt(t[2],10):1,n.numChannels=n.channels,n},Z.writeRtpMap=function(e){let t=e.payloadType;void 0!==e.preferredPayloadType&&(t=e.preferredPayloadType);let n=e.channels||e.numChannels||1;return"a=rtpmap:"+t+" "+e.name+"/"+e.clockRate+(1!==n?"/"+n:"")+"\r\n"},Z.parseExtmap=function(e){let t=e.substring(9).split(" ");return{id:parseInt(t[0],10),direction:t[0].indexOf("/")>0?t[0].split("/")[1]:"sendrecv",uri:t[1],attributes:t.slice(2).join(" ")}},Z.writeExtmap=function(e){return"a=extmap:"+(e.id||e.preferredId)+(e.direction&&"sendrecv"!==e.direction?"/"+e.direction:"")+" "+e.uri+(e.attributes?" "+e.attributes:"")+"\r\n"},Z.parseFmtp=function(e){let t,n={},r=e.substring(e.indexOf(" ")+1).split(";");for(let e=0;e<r.length;e++)n[(t=r[e].trim().split("="))[0].trim()]=t[1];return n},Z.writeFmtp=function(e){let t="",n=e.payloadType;if(void 0!==e.preferredPayloadType&&(n=e.preferredPayloadType),e.parameters&&Object.keys(e.parameters).length){let r=[];Object.keys(e.parameters).forEach(t=>{void 0!==e.parameters[t]?r.push(t+"="+e.parameters[t]):r.push(t)}),t+="a=fmtp:"+n+" "+r.join(";")+"\r\n"}return t},Z.parseRtcpFb=function(e){let t=e.substring(e.indexOf(" ")+1).split(" ");return{type:t.shift(),parameter:t.join(" ")}},Z.writeRtcpFb=function(e){let t="",n=e.payloadType;return void 0!==e.preferredPayloadType&&(n=e.preferredPayloadType),e.rtcpFeedback&&e.rtcpFeedback.length&&e.rtcpFeedback.forEach(e=>{t+="a=rtcp-fb:"+n+" "+e.type+(e.parameter&&e.parameter.length?" "+e.parameter:"")+"\r\n"}),t},Z.parseSsrcMedia=function(e){let t=e.indexOf(" "),n={ssrc:parseInt(e.substring(7,t),10)},r=e.indexOf(":",t);return r>-1?(n.attribute=e.substring(t+1,r),n.value=e.substring(r+1)):n.attribute=e.substring(t+1),n},Z.parseSsrcGroup=function(e){let t=e.substring(13).split(" ");return{semantics:t.shift(),ssrcs:t.map(e=>parseInt(e,10))}},Z.getMid=function(e){let t=Z.matchPrefix(e,"a=mid:")[0];if(t)return t.substring(6)},Z.parseFingerprint=function(e){let t=e.substring(14).split(" ");return{algorithm:t[0].toLowerCase(),value:t[1].toUpperCase()}},Z.getDtlsParameters=function(e,t){return{role:"auto",fingerprints:Z.matchPrefix(e+t,"a=fingerprint:").map(Z.parseFingerprint)}},Z.writeDtlsParameters=function(e,t){let n="a=setup:"+t+"\r\n";return e.fingerprints.forEach(e=>{n+="a=fingerprint:"+e.algorithm+" "+e.value+"\r\n"}),n},Z.parseCryptoLine=function(e){let t=e.substring(9).split(" ");return{tag:parseInt(t[0],10),cryptoSuite:t[1],keyParams:t[2],sessionParams:t.slice(3)}},Z.writeCryptoLine=function(e){return"a=crypto:"+e.tag+" "+e.cryptoSuite+" "+("object"==typeof e.keyParams?Z.writeCryptoKeyParams(e.keyParams):e.keyParams)+(e.sessionParams?" "+e.sessionParams.join(" "):"")+"\r\n"},Z.parseCryptoKeyParams=function(e){if(0!==e.indexOf("inline:"))return null;let t=e.substring(7).split("|");return{keyMethod:"inline",keySalt:t[0],lifeTime:t[1],mkiValue:t[2]?t[2].split(":")[0]:void 0,mkiLength:t[2]?t[2].split(":")[1]:void 0}},Z.writeCryptoKeyParams=function(e){return e.keyMethod+":"+e.keySalt+(e.lifeTime?"|"+e.lifeTime:"")+(e.mkiValue&&e.mkiLength?"|"+e.mkiValue+":"+e.mkiLength:"")},Z.getCryptoParameters=function(e,t){return Z.matchPrefix(e+t,"a=crypto:").map(Z.parseCryptoLine)},Z.getIceParameters=function(e,t){let n=Z.matchPrefix(e+t,"a=ice-ufrag:")[0],r=Z.matchPrefix(e+t,"a=ice-pwd:")[0];return n&&r?{usernameFragment:n.substring(12),password:r.substring(10)}:null},Z.writeIceParameters=function(e){let t="a=ice-ufrag:"+e.usernameFragment+"\r\na=ice-pwd:"+e.password+"\r\n";return e.iceLite&&(t+="a=ice-lite\r\n"),t},Z.parseRtpParameters=function(e){let t={codecs:[],headerExtensions:[],fecMechanisms:[],rtcp:[]},n=Z.splitLines(e)[0].split(" ");t.profile=n[2];for(let r=3;r<n.length;r++){let i=n[r],s=Z.matchPrefix(e,"a=rtpmap:"+i+" ")[0];if(s){let n=Z.parseRtpMap(s),r=Z.matchPrefix(e,"a=fmtp:"+i+" ");switch(n.parameters=r.length?Z.parseFmtp(r[0]):{},n.rtcpFeedback=Z.matchPrefix(e,"a=rtcp-fb:"+i+" ").map(Z.parseRtcpFb),t.codecs.push(n),n.name.toUpperCase()){case"RED":case"ULPFEC":t.fecMechanisms.push(n.name.toUpperCase())}}}Z.matchPrefix(e,"a=extmap:").forEach(e=>{t.headerExtensions.push(Z.parseExtmap(e))});let r=Z.matchPrefix(e,"a=rtcp-fb:* ").map(Z.parseRtcpFb);return t.codecs.forEach(e=>{r.forEach(t=>{e.rtcpFeedback.find(e=>e.type===t.type&&e.parameter===t.parameter)||e.rtcpFeedback.push(t)})}),t},Z.writeRtpDescription=function(e,t){let n="";n+="m="+e+" ",n+=t.codecs.length>0?"9":"0",n+=" "+(t.profile||"UDP/TLS/RTP/SAVPF")+" ",n+=t.codecs.map(e=>void 0!==e.preferredPayloadType?e.preferredPayloadType:e.payloadType).join(" ")+"\r\n",n+="c=IN IP4 0.0.0.0\r\n",n+="a=rtcp:9 IN IP4 0.0.0.0\r\n",t.codecs.forEach(e=>{n+=Z.writeRtpMap(e),n+=Z.writeFmtp(e),n+=Z.writeRtcpFb(e)});let r=0;return t.codecs.forEach(e=>{e.maxptime>r&&(r=e.maxptime)}),r>0&&(n+="a=maxptime:"+r+"\r\n"),t.headerExtensions&&t.headerExtensions.forEach(e=>{n+=Z.writeExtmap(e)}),n},Z.parseRtpEncodingParameters=function(e){let t,n=[],r=Z.parseRtpParameters(e),i=-1!==r.fecMechanisms.indexOf("RED"),s=-1!==r.fecMechanisms.indexOf("ULPFEC"),o=Z.matchPrefix(e,"a=ssrc:").map(e=>Z.parseSsrcMedia(e)).filter(e=>"cname"===e.attribute),a=o.length>0&&o[0].ssrc,c=Z.matchPrefix(e,"a=ssrc-group:FID").map(e=>e.substring(17).split(" ").map(e=>parseInt(e,10)));c.length>0&&c[0].length>1&&c[0][0]===a&&(t=c[0][1]),r.codecs.forEach(e=>{if("RTX"===e.name.toUpperCase()&&e.parameters.apt){let r={ssrc:a,codecPayloadType:parseInt(e.parameters.apt,10)};a&&t&&(r.rtx={ssrc:t}),n.push(r),i&&((r=JSON.parse(JSON.stringify(r))).fec={ssrc:a,mechanism:s?"red+ulpfec":"red"},n.push(r))}}),0===n.length&&a&&n.push({ssrc:a});let p=Z.matchPrefix(e,"b=");return p.length&&(p=0===p[0].indexOf("b=TIAS:")?parseInt(p[0].substring(7),10):0===p[0].indexOf("b=AS:")?950*parseInt(p[0].substring(5),10)-16e3:void 0,n.forEach(e=>{e.maxBitrate=p})),n},Z.parseRtcpParameters=function(e){let t={},n=Z.matchPrefix(e,"a=ssrc:").map(e=>Z.parseSsrcMedia(e)).filter(e=>"cname"===e.attribute)[0];n&&(t.cname=n.value,t.ssrc=n.ssrc);let r=Z.matchPrefix(e,"a=rtcp-rsize");return t.reducedSize=r.length>0,t.compound=0===r.length,t.mux=Z.matchPrefix(e,"a=rtcp-mux").length>0,t},Z.writeRtcpParameters=function(e){let t="";return e.reducedSize&&(t+="a=rtcp-rsize\r\n"),e.mux&&(t+="a=rtcp-mux\r\n"),void 0!==e.ssrc&&e.cname&&(t+="a=ssrc:"+e.ssrc+" cname:"+e.cname+"\r\n"),t},Z.parseMsid=function(e){let t,n=Z.matchPrefix(e,"a=msid:");if(1===n.length)return{stream:(t=n[0].substring(7).split(" "))[0],track:t[1]};let r=Z.matchPrefix(e,"a=ssrc:").map(e=>Z.parseSsrcMedia(e)).filter(e=>"msid"===e.attribute);if(r.length>0)return{stream:(t=r[0].value.split(" "))[0],track:t[1]}},Z.parseSctpDescription=function(e){let t,n=Z.parseMLine(e),r=Z.matchPrefix(e,"a=max-message-size:");r.length>0&&(t=parseInt(r[0].substring(19),10)),isNaN(t)&&(t=65536);let i=Z.matchPrefix(e,"a=sctp-port:");if(i.length>0)return{port:parseInt(i[0].substring(12),10),protocol:n.fmt,maxMessageSize:t};let s=Z.matchPrefix(e,"a=sctpmap:");if(s.length>0){let e=s[0].substring(10).split(" ");return{port:parseInt(e[0],10),protocol:e[1],maxMessageSize:t}}},Z.writeSctpDescription=function(e,t){let n=[];return n="DTLS/SCTP"!==e.protocol?["m="+e.kind+" 9 "+e.protocol+" "+t.protocol+"\r\n","c=IN IP4 0.0.0.0\r\n","a=sctp-port:"+t.port+"\r\n"]:["m="+e.kind+" 9 "+e.protocol+" "+t.port+"\r\n","c=IN IP4 0.0.0.0\r\n","a=sctpmap:"+t.port+" "+t.protocol+" 65535\r\n"],void 0!==t.maxMessageSize&&n.push("a=max-message-size:"+t.maxMessageSize+"\r\n"),n.join("")},Z.generateSessionId=function(){return Math.random().toString().substr(2,22)},Z.writeSessionBoilerplate=function(e,t,n){return"v=0\r\no="+(n||"thisisadapterortc")+" "+(e||Z.generateSessionId())+" "+(void 0!==t?t:2)+" IN IP4 127.0.0.1\r\ns=-\r\nt=0 0\r\n"},Z.getDirection=function(e,t){let n=Z.splitLines(e);for(let e=0;e<n.length;e++)switch(n[e]){case"a=sendrecv":case"a=sendonly":case"a=recvonly":case"a=inactive":return n[e].substring(2)}return t?Z.getDirection(t):"sendrecv"},Z.getKind=function(e){return Z.splitLines(e)[0].split(" ")[0].substring(2)},Z.isRejected=function(e){return"0"===e.split(" ",2)[1]},Z.parseMLine=function(e){let t=Z.splitLines(e)[0].substring(2).split(" ");return{kind:t[0],port:parseInt(t[1],10),protocol:t[2],fmt:t.slice(3).join(" ")}},Z.parseOLine=function(e){let t=Z.matchPrefix(e,"o=")[0].substring(2).split(" ");return{username:t[0],sessionId:t[1],sessionVersion:parseInt(t[2],10),netType:t[3],addressType:t[4],address:t[5]}},Z.isValidSDP=function(e){if("string"!=typeof e||0===e.length)return!1;let t=Z.splitLines(e);for(let e=0;e<t.length;e++)if(t[e].length<2||"="!==t[e].charAt(1))return!1;return!0},q=Z;let ec=function({window:e}={},t={shimChrome:!0,shimFirefox:!0,shimSafari:!0}){let n=function(e){let t={browser:null,version:null};if(void 0===e||!e.navigator||!e.navigator.userAgent)return t.browser="Not a browser.",t;let{navigator:n}=e;if(n.userAgentData&&n.userAgentData.brands){let e=n.userAgentData.brands.find(e=>"Chromium"===e.brand);if(e)return{browser:"chrome",version:parseInt(e.version,10)}}return n.mozGetUserMedia?(t.browser="firefox",t.version=d(n.userAgent,/Firefox\/(\d+)\./,1)):n.webkitGetUserMedia||!1===e.isSecureContext&&e.webkitRTCPeerConnection?(t.browser="chrome",t.version=d(n.userAgent,/Chrom(e|ium)\/(\d+)\./,2)):e.RTCPeerConnection&&n.userAgent.match(/AppleWebKit\/(\d+)\./)?(t.browser="safari",t.version=d(n.userAgent,/AppleWebKit\/(\d+)\./,1),t.supportsUnifiedPlan=e.RTCRtpTransceiver&&"currentDirection"in e.RTCRtpTransceiver.prototype):t.browser="Not a supported browser.",t}(e),r={browserDetails:n,commonShim:Q,extractVersion:d,disableLog:h,disableWarnings:u,sdp:q};switch(n.browser){case"chrome":if(!y||!y.shimPeerConnection||!t.shimChrome){f("Chrome shim is not included in this adapter release.");break}if(null===n.version){f("Chrome shim can not determine version, not shimming.");break}f("adapter.js shimming chrome."),r.browserShim=y,eo(e,n),ea(e,n),y.shimGetUserMedia(e,n),y.shimMediaStream(e,n),y.shimPeerConnection(e,n),y.shimOnTrack(e,n),y.shimAddTrackRemoveTrack(e,n),y.shimGetSendersWithDtmf(e,n),y.shimSenderReceiverGetStats(e,n),y.fixNegotiationNeeded(e,n),ee(e,n),et(e,n),ei(e,n),en(e,n),er(e,n),es(e,n);break;case"firefox":if(!E||!E.shimPeerConnection||!t.shimFirefox){f("Firefox shim is not included in this adapter release.");break}f("adapter.js shimming firefox."),r.browserShim=E,eo(e,n),ea(e,n),E.shimGetUserMedia(e,n),E.shimPeerConnection(e,n),E.shimOnTrack(e,n),E.shimRemoveStream(e,n),E.shimSenderGetStats(e,n),E.shimReceiverGetStats(e,n),E.shimRTCDataChannel(e,n),E.shimAddTransceiver(e,n),E.shimGetParameters(e,n),E.shimCreateOffer(e,n),E.shimCreateAnswer(e,n),ee(e,n),ei(e,n),en(e,n),er(e,n);break;case"safari":if(!z||!t.shimSafari){f("Safari shim is not included in this adapter release.");break}f("adapter.js shimming safari."),r.browserShim=z,eo(e,n),ea(e,n),z.shimRTCIceServerUrls(e,n),z.shimCreateOfferLegacy(e,n),z.shimCallbacksAPI(e,n),z.shimLocalStreamsAPI(e,n),z.shimRemoteStreamsAPI(e,n),z.shimTrackEventTransceiver(e,n),z.shimGetUserMedia(e,n),z.shimAudioContext(e,n),ee(e,n),et(e,n),en(e,n),er(e,n),es(e,n);break;default:f("Unsupported browser!")}return r}({window:"undefined"==typeof window?void 0:window}),ep=ec.default||ec,ed=new class{isWebRTCSupported(){return"undefined"!=typeof RTCPeerConnection}isBrowserSupported(){let e=this.getBrowser(),t=this.getVersion();return!!this.supportedBrowsers.includes(e)&&("chrome"===e?t>=this.minChromeVersion:"firefox"===e?t>=this.minFirefoxVersion:"safari"===e&&!this.isIOS&&t>=this.minSafariVersion)}getBrowser(){return ep.browserDetails.browser}getVersion(){return ep.browserDetails.version||0}isUnifiedPlanSupported(){let e,t=this.getBrowser(),n=ep.browserDetails.version||0;if("chrome"===t&&n<this.minChromeVersion)return!1;if("firefox"===t&&n>=this.minFirefoxVersion)return!0;if(!window.RTCRtpTransceiver||!("currentDirection"in RTCRtpTransceiver.prototype))return!1;let r=!1;try{(e=new RTCPeerConnection).addTransceiver("audio"),r=!0}catch(e){}finally{e&&e.close()}return r}toString(){return`Supports:
+    browser:${this.getBrowser()}
+    version:${this.getVersion()}
+    isIOS:${this.isIOS}
+    isWebRTCSupported:${this.isWebRTCSupported()}
+    isBrowserSupported:${this.isBrowserSupported()}
+    isUnifiedPlanSupported:${this.isUnifiedPlanSupported()}`}constructor(){this.isIOS="undefined"!=typeof navigator&&["iPad","iPhone","iPod"].includes(navigator.platform),this.supportedBrowsers=["firefox","chrome","safari"],this.minFirefoxVersion=59,this.minChromeVersion=72,this.minSafariVersion=605}},el=e=>!e||/^[A-Za-z0-9]+(?:[ _-][A-Za-z0-9]+)*$/.test(e),eh=()=>Math.random().toString(36).slice(2),eu={iceServers:[{urls:"stun:stun.l.google.com:19302"},{urls:["turn:eu-0.turn.peerjs.com:3478","turn:us-0.turn.peerjs.com:3478"],username:"peerjs",credential:"peerjsp"}],sdpSemantics:"unified-plan"},ef=new class extends n{noop(){}blobToArrayBuffer(e,t){let n=new FileReader;return n.onload=function(e){e.target&&t(e.target.result)},n.readAsArrayBuffer(e),n}binaryStringToArrayBuffer(e){let t=new Uint8Array(e.length);for(let n=0;n<e.length;n++)t[n]=255&e.charCodeAt(n);return t.buffer}isSecure(){return"https:"===location.protocol}constructor(...e){super(...e),this.CLOUD_HOST="0.peerjs.com",this.CLOUD_PORT=443,this.chunkedBrowsers={Chrome:1,chrome:1},this.defaultConfig=eu,this.browser=ed.getBrowser(),this.browserVersion=ed.getVersion(),this.pack=s,this.unpack=i,this.supports=function(){let e,t={browser:ed.isBrowserSupported(),webRTC:ed.isWebRTCSupported(),audioVideo:!1,data:!1,binaryBlob:!1,reliable:!1};if(!t.webRTC)return t;try{let n;e=new RTCPeerConnection(eu),t.audioVideo=!0;try{n=e.createDataChannel("_PEERJSTEST",{ordered:!0}),t.data=!0,t.reliable=!!n.ordered;try{n.binaryType="blob",t.binaryBlob=!ed.isIOS}catch(e){}}catch(e){}finally{n&&n.close()}}catch(e){}finally{e&&e.close()}return t}(),this.validateId=el,this.randomToken=eh}};"use strict";var em=new class{get logLevel(){return this._logLevel}set logLevel(e){this._logLevel=e}log(...e){this._logLevel>=3&&this._print(3,...e)}warn(...e){this._logLevel>=2&&this._print(2,...e)}error(...e){this._logLevel>=1&&this._print(1,...e)}setLogFunction(e){this._print=e}_print(e,...t){let n=["PeerJS: ",...t];for(let e in n)n[e]instanceof Error&&(n[e]="("+n[e].name+") "+n[e].message);e>=3?console.log(...n):e>=2?console.warn("WARNING",...n):e>=1&&console.error("ERROR",...n)}constructor(){this._logLevel=0}},e_={},eg=Object.prototype.hasOwnProperty,ey="~";function eC(){}function ev(e,t,n){this.fn=e,this.context=t,this.once=n||!1}function eb(e,t,n,r,i){if("function"!=typeof n)throw TypeError("The listener must be a function");var s=new ev(n,r||e,i),o=ey?ey+t:t;return e._events[o]?e._events[o].fn?e._events[o]=[e._events[o],s]:e._events[o].push(s):(e._events[o]=s,e._eventsCount++),e}function eT(e,t){0==--e._eventsCount?e._events=new eC:delete e._events[t]}function eS(){this._events=new eC,this._eventsCount=0}Object.create&&(eC.prototype=Object.create(null),new eC().__proto__||(ey=!1)),eS.prototype.eventNames=function(){var e,t,n=[];if(0===this._eventsCount)return n;for(t in e=this._events)eg.call(e,t)&&n.push(ey?t.slice(1):t);return Object.getOwnPropertySymbols?n.concat(Object.getOwnPropertySymbols(e)):n},eS.prototype.listeners=function(e){var t=ey?ey+e:e,n=this._events[t];if(!n)return[];if(n.fn)return[n.fn];for(var r=0,i=n.length,s=Array(i);r<i;r++)s[r]=n[r].fn;return s},eS.prototype.listenerCount=function(e){var t=ey?ey+e:e,n=this._events[t];return n?n.fn?1:n.length:0},eS.prototype.emit=function(e,t,n,r,i,s){var o=ey?ey+e:e;if(!this._events[o])return!1;var a,c,p=this._events[o],d=arguments.length;if(p.fn){switch(p.once&&this.removeListener(e,p.fn,void 0,!0),d){case 1:return p.fn.call(p.context),!0;case 2:return p.fn.call(p.context,t),!0;case 3:return p.fn.call(p.context,t,n),!0;case 4:return p.fn.call(p.context,t,n,r),!0;case 5:return p.fn.call(p.context,t,n,r,i),!0;case 6:return p.fn.call(p.context,t,n,r,i,s),!0}for(c=1,a=Array(d-1);c<d;c++)a[c-1]=arguments[c];p.fn.apply(p.context,a)}else{var l,h=p.length;for(c=0;c<h;c++)switch(p[c].once&&this.removeListener(e,p[c].fn,void 0,!0),d){case 1:p[c].fn.call(p[c].context);break;case 2:p[c].fn.call(p[c].context,t);break;case 3:p[c].fn.call(p[c].context,t,n);break;case 4:p[c].fn.call(p[c].context,t,n,r);break;default:if(!a)for(l=1,a=Array(d-1);l<d;l++)a[l-1]=arguments[l];p[c].fn.apply(p[c].context,a)}}return!0},eS.prototype.on=function(e,t,n){return eb(this,e,t,n,!1)},eS.prototype.once=function(e,t,n){return eb(this,e,t,n,!0)},eS.prototype.removeListener=function(e,t,n,r){var i=ey?ey+e:e;if(!this._events[i])return this;if(!t)return eT(this,i),this;var s=this._events[i];if(s.fn)s.fn!==t||r&&!s.once||n&&s.context!==n||eT(this,i);else{for(var o=0,a=[],c=s.length;o<c;o++)(s[o].fn!==t||r&&!s[o].once||n&&s[o].context!==n)&&a.push(s[o]);a.length?this._events[i]=1===a.length?a[0]:a:eT(this,i)}return this},eS.prototype.removeAllListeners=function(e){var t;return e?(t=ey?ey+e:e,this._events[t]&&eT(this,t)):(this._events=new eC,this._eventsCount=0),this},eS.prototype.off=eS.prototype.removeListener,eS.prototype.addListener=eS.prototype.on,eS.prefixed=ey,eS.EventEmitter=eS,e_=eS;var ek=function(e){return e.Data="data",e.Media="media",e}({}),eR=function(e){return e.BrowserIncompatible="browser-incompatible",e.Disconnected="disconnected",e.InvalidID="invalid-id",e.InvalidKey="invalid-key",e.Network="network",e.PeerUnavailable="peer-unavailable",e.SslUnavailable="ssl-unavailable",e.ServerError="server-error",e.SocketError="socket-error",e.SocketClosed="socket-closed",e.UnavailableID="unavailable-id",e.WebRTC="webrtc",e}({}),eP=function(e){return e.NegotiationFailed="negotiation-failed",e.ConnectionClosed="connection-closed",e}({}),ew=function(e){return e.NotOpenYet="not-open-yet",e.MessageToBig="message-too-big",e}({}),eE=function(e){return e.Binary="binary",e.BinaryUTF8="binary-utf8",e.JSON="json",e.None="raw",e}({}),ex=function(e){return e.Message="message",e.Disconnected="disconnected",e.Error="error",e.Close="close",e}({}),eD=function(e){return e.Heartbeat="HEARTBEAT",e.Candidate="CANDIDATE",e.Offer="OFFER",e.Answer="ANSWER",e.Open="OPEN",e.Error="ERROR",e.IdTaken="ID-TAKEN",e.InvalidKey="INVALID-KEY",e.Leave="LEAVE",e.Expire="EXPIRE",e}({});let eI="1.5.5";class eM extends e_.EventEmitter{start(e,t){this._id=e;let n=`${this._baseUrl}&id=${e}&token=${t}`;!this._socket&&this._disconnected&&(this._socket=new WebSocket(n+"&version="+eI),this._disconnected=!1,this._socket.onmessage=e=>{let t;try{t=JSON.parse(e.data),em.log("Server message received:",t)}catch(t){em.log("Invalid server message",e.data);return}this.emit(ex.Message,t)},this._socket.onclose=e=>{this._disconnected||(em.log("Socket closed.",e),this._cleanup(),this._disconnected=!0,this.emit(ex.Disconnected))},this._socket.onopen=()=>{this._disconnected||(this._sendQueuedMessages(),em.log("Socket open"),this._scheduleHeartbeat())})}_scheduleHeartbeat(){this._wsPingTimer=setTimeout(()=>{this._sendHeartbeat()},this.pingInterval)}_sendHeartbeat(){if(!this._wsOpen())return void em.log("Cannot send heartbeat, because socket closed");let e=JSON.stringify({type:eD.Heartbeat});this._socket.send(e),this._scheduleHeartbeat()}_wsOpen(){return!!this._socket&&1===this._socket.readyState}_sendQueuedMessages(){let e=[...this._messagesQueue];for(let t of(this._messagesQueue=[],e))this.send(t)}send(e){if(this._disconnected)return;if(!this._id)return void this._messagesQueue.push(e);if(!e.type)return void this.emit(ex.Error,"Invalid message");if(!this._wsOpen())return;let t=JSON.stringify(e);this._socket.send(t)}close(){this._disconnected||(this._cleanup(),this._disconnected=!0)}_cleanup(){this._socket&&(this._socket.onopen=this._socket.onmessage=this._socket.onclose=null,this._socket.close(),this._socket=void 0),clearTimeout(this._wsPingTimer)}constructor(e,t,n,r,i,s=5e3){super(),this.pingInterval=s,this._disconnected=!0,this._messagesQueue=[],this._baseUrl=(e?"wss://":"ws://")+t+":"+n+r+"peerjs?key="+i}}class eO{startConnection(e){let t=this._startPeerConnection();if(this.connection.peerConnection=t,this.connection.type===ek.Media&&e._stream&&this._addTracksToConnection(e._stream,t),e.originator){let n=this.connection,r={ordered:!!e.reliable},i=t.createDataChannel(n.label,r);n._initializeDataChannel(i),this._makeOffer()}else this.handleSDP("OFFER",e.sdp)}_startPeerConnection(){em.log("Creating RTCPeerConnection.");let e=new RTCPeerConnection(this.connection.provider.options.config);return this._setupListeners(e),e}_setupListeners(e){let t=this.connection.peer,n=this.connection.connectionId,r=this.connection.type,i=this.connection.provider;em.log("Listening for ICE candidates."),e.onicecandidate=e=>{e.candidate&&e.candidate.candidate&&(em.log(`Received ICE candidates for ${t}:`,e.candidate),i.socket.send({type:eD.Candidate,payload:{candidate:e.candidate,type:r,connectionId:n},dst:t}))},e.oniceconnectionstatechange=()=>{switch(e.iceConnectionState){case"failed":em.log("iceConnectionState is failed, closing connections to "+t),this.connection.emitError(eP.NegotiationFailed,"Negotiation of connection to "+t+" failed."),this.connection.close();break;case"closed":em.log("iceConnectionState is closed, closing connections to "+t),this.connection.emitError(eP.ConnectionClosed,"Connection to "+t+" closed."),this.connection.close();break;case"disconnected":em.log("iceConnectionState changed to disconnected on the connection with "+t);break;case"completed":e.onicecandidate=()=>{}}this.connection.emit("iceStateChanged",e.iceConnectionState)},em.log("Listening for data channel"),e.ondatachannel=e=>{em.log("Received data channel");let r=e.channel;i.getConnection(t,n)._initializeDataChannel(r)},em.log("Listening for remote stream"),e.ontrack=e=>{em.log("Received remote stream");let r=e.streams[0],s=i.getConnection(t,n);s.type===ek.Media&&this._addStreamToMediaConnection(r,s)}}cleanup(){em.log("Cleaning up PeerConnection to "+this.connection.peer);let e=this.connection.peerConnection;if(!e)return;this.connection.peerConnection=null,e.onicecandidate=e.oniceconnectionstatechange=e.ondatachannel=e.ontrack=()=>{};let t="closed"!==e.signalingState,n=!1,r=this.connection.dataChannel;r&&(n=!!r.readyState&&"closed"!==r.readyState),(t||n)&&e.close()}async _makeOffer(){let e=this.connection.peerConnection,t=this.connection.provider;try{let n=await e.createOffer(this.connection.options.constraints);em.log("Created offer."),this.connection.options.sdpTransform&&"function"==typeof this.connection.options.sdpTransform&&(n.sdp=this.connection.options.sdpTransform(n.sdp)||n.sdp);try{await e.setLocalDescription(n),em.log("Set localDescription:",n,`for:${this.connection.peer}`);let r={sdp:n,type:this.connection.type,connectionId:this.connection.connectionId,metadata:this.connection.metadata};if(this.connection.type===ek.Data){let e=this.connection;r={...r,label:e.label,reliable:e.reliable,serialization:e.serialization}}t.socket.send({type:eD.Offer,payload:r,dst:this.connection.peer})}catch(e){"OperationError: Failed to set local offer sdp: Called in wrong state: kHaveRemoteOffer"!=e&&(t.emitError(eR.WebRTC,e),em.log("Failed to setLocalDescription, ",e))}}catch(e){t.emitError(eR.WebRTC,e),em.log("Failed to createOffer, ",e)}}async _makeAnswer(){let e=this.connection.peerConnection,t=this.connection.provider;try{let n=await e.createAnswer();em.log("Created answer."),this.connection.options.sdpTransform&&"function"==typeof this.connection.options.sdpTransform&&(n.sdp=this.connection.options.sdpTransform(n.sdp)||n.sdp);try{await e.setLocalDescription(n),em.log("Set localDescription:",n,`for:${this.connection.peer}`),t.socket.send({type:eD.Answer,payload:{sdp:n,type:this.connection.type,connectionId:this.connection.connectionId},dst:this.connection.peer})}catch(e){t.emitError(eR.WebRTC,e),em.log("Failed to setLocalDescription, ",e)}}catch(e){t.emitError(eR.WebRTC,e),em.log("Failed to create answer, ",e)}}async handleSDP(e,t){t=new RTCSessionDescription(t);let n=this.connection.peerConnection,r=this.connection.provider;em.log("Setting remote description",t);try{await n.setRemoteDescription(t),em.log(`Set remoteDescription:${e} for:${this.connection.peer}`),"OFFER"===e&&await this._makeAnswer()}catch(e){r.emitError(eR.WebRTC,e),em.log("Failed to setRemoteDescription, ",e)}}async handleCandidate(e){em.log("handleCandidate:",e);try{await this.connection.peerConnection.addIceCandidate(e),em.log(`Added ICE candidate for:${this.connection.peer}`)}catch(e){this.connection.provider.emitError(eR.WebRTC,e),em.log("Failed to handleCandidate, ",e)}}_addTracksToConnection(e,t){if(em.log(`add tracks from stream ${e.id} to peer connection`),!t.addTrack)return em.error("Your browser does't support RTCPeerConnection#addTrack. Ignored.");e.getTracks().forEach(n=>{t.addTrack(n,e)})}_addStreamToMediaConnection(e,t){em.log(`add stream ${e.id} to media connection ${t.connectionId}`),t.addStream(e)}constructor(e){this.connection=e}}class eL extends e_.EventEmitter{emitError(e,t){em.error("Error:",t),this.emit("error",new eA(`${e}`,t))}}class eA extends Error{constructor(e,t){"string"==typeof t?super(t):(super(),Object.assign(this,t)),this.type=e}}class ej extends eL{get open(){return this._open}constructor(e,t,n){super(),this.peer=e,this.provider=t,this.options=n,this._open=!1,this.metadata=n.metadata}}class eB extends ej{get type(){return ek.Media}get localStream(){return this._localStream}get remoteStream(){return this._remoteStream}_initializeDataChannel(e){this.dataChannel=e,this.dataChannel.onopen=()=>{em.log(`DC#${this.connectionId} dc connection success`),this.emit("willCloseOnRemote")},this.dataChannel.onclose=()=>{em.log(`DC#${this.connectionId} dc closed for:`,this.peer),this.close()}}addStream(e){em.log("Receiving stream",e),this._remoteStream=e,super.emit("stream",e)}handleMessage(e){let t=e.type,n=e.payload;switch(e.type){case eD.Answer:this._negotiator.handleSDP(t,n.sdp),this._open=!0;break;case eD.Candidate:this._negotiator.handleCandidate(n.candidate);break;default:em.warn(`Unrecognized message type:${t} from peer:${this.peer}`)}}answer(e,t={}){if(this._localStream)return void em.warn("Local stream already exists on this MediaConnection. Are you answering a call twice?");for(let n of(this._localStream=e,t&&t.sdpTransform&&(this.options.sdpTransform=t.sdpTransform),this._negotiator.startConnection({...this.options._payload,_stream:e}),this.provider._getMessages(this.connectionId)))this.handleMessage(n);this._open=!0}close(){this._negotiator&&(this._negotiator.cleanup(),this._negotiator=null),this._localStream=null,this._remoteStream=null,this.provider&&(this.provider._removeConnection(this),this.provider=null),this.options&&this.options._stream&&(this.options._stream=null),this.open&&(this._open=!1,super.emit("close"))}constructor(e,t,n){super(e,t,n),this._localStream=this.options._stream,this.connectionId=this.options.connectionId||eB.ID_PREFIX+ef.randomToken(),this._negotiator=new eO(this),this._localStream&&this._negotiator.startConnection({_stream:this._localStream,originator:!0})}}eB.ID_PREFIX="mc_";class eU{_buildRequest(e){let t=this._options.secure?"https":"http",{host:n,port:r,path:i,key:s}=this._options,o=new URL(`${t}://${n}:${r}${i}${s}/${e}`);return o.searchParams.set("ts",`${Date.now()}${Math.random()}`),o.searchParams.set("version",eI),fetch(o.href,{referrerPolicy:this._options.referrerPolicy})}async retrieveId(){try{let e=await this._buildRequest("id");if(200!==e.status)throw Error(`Error. Status:${e.status}`);return e.text()}catch(t){em.error("Error retrieving ID",t);let e="";throw"/"===this._options.path&&this._options.host!==ef.CLOUD_HOST&&(e=" If you passed in a `path` to your self-hosted PeerServer, you'll also need to pass in that same path when creating a new Peer."),Error("Could not get an ID from the server."+e)}}async listAllPeers(){try{let e=await this._buildRequest("peers");if(200!==e.status){if(401===e.status){let e="";throw e=this._options.host===ef.CLOUD_HOST?"It looks like you're using the cloud server. You can email team@peerjs.com to enable peer listing for your API key.":"You need to enable `allow_discovery` on your self-hosted PeerServer to use this feature.",Error("It doesn't look like you have permission to list peers IDs. "+e)}throw Error(`Error. Status:${e.status}`)}return e.json()}catch(e){throw em.error("Error retrieving list peers",e),Error("Could not get list peers from the server."+e)}}constructor(e){this._options=e}}class eF extends ej{get type(){return ek.Data}_initializeDataChannel(e){this.dataChannel=e,this.dataChannel.onopen=()=>{em.log(`DC#${this.connectionId} dc connection success`),this._open=!0,this.emit("open")},this.dataChannel.onmessage=e=>{em.log(`DC#${this.connectionId} dc onmessage:`,e.data)},this.dataChannel.onclose=()=>{em.log(`DC#${this.connectionId} dc closed for:`,this.peer),this.close()}}close(e){if(e?.flush)return void this.send({__peerData:{type:"close"}});this._negotiator&&(this._negotiator.cleanup(),this._negotiator=null),this.provider&&(this.provider._removeConnection(this),this.provider=null),this.dataChannel&&(this.dataChannel.onopen=null,this.dataChannel.onmessage=null,this.dataChannel.onclose=null,this.dataChannel=null),this.open&&(this._open=!1,super.emit("close"))}send(e,t=!1){return this.open?this._send(e,t):void this.emitError(ew.NotOpenYet,"Connection is not open. You should listen for the `open` event before sending messages.")}async handleMessage(e){let t=e.payload;switch(e.type){case eD.Answer:await this._negotiator.handleSDP(e.type,t.sdp);break;case eD.Candidate:await this._negotiator.handleCandidate(t.candidate);break;default:em.warn("Unrecognized message type:",e.type,"from peer:",this.peer)}}constructor(e,t,n){super(e,t,n),this.connectionId=this.options.connectionId||eF.ID_PREFIX+eh(),this.label=this.options.label||this.connectionId,this.reliable=!!this.options.reliable,this._negotiator=new eO(this),this._negotiator.startConnection(this.options._payload||{originator:!0,reliable:this.reliable})}}eF.ID_PREFIX="dc_",eF.MAX_BUFFERED_AMOUNT=8388608;class eN extends eF{get bufferSize(){return this._bufferSize}_initializeDataChannel(e){super._initializeDataChannel(e),this.dataChannel.binaryType="arraybuffer",this.dataChannel.addEventListener("message",e=>this._handleDataMessage(e))}_bufferedSend(e){(this._buffering||!this._trySend(e))&&(this._buffer.push(e),this._bufferSize=this._buffer.length)}_trySend(e){if(!this.open)return!1;if(this.dataChannel.bufferedAmount>eF.MAX_BUFFERED_AMOUNT)return this._buffering=!0,setTimeout(()=>{this._buffering=!1,this._tryBuffer()},50),!1;try{this.dataChannel.send(e)}catch(e){return em.error(`DC#:${this.connectionId} Error when sending:`,e),this._buffering=!0,this.close(),!1}return!0}_tryBuffer(){if(!this.open||0===this._buffer.length)return;let e=this._buffer[0];this._trySend(e)&&(this._buffer.shift(),this._bufferSize=this._buffer.length,this._tryBuffer())}close(e){if(e?.flush)return void this.send({__peerData:{type:"close"}});this._buffer=[],this._bufferSize=0,super.close()}constructor(...e){super(...e),this._buffer=[],this._bufferSize=0,this._buffering=!1}}class ez extends eN{close(e){super.close(e),this._chunkedData={}}_handleDataMessage({data:e}){let t=i(e),n=t.__peerData;if(n)return"close"===n.type?void this.close():void this._handleChunk(t);this.emit("data",t)}_handleChunk(e){let t=e.__peerData,n=this._chunkedData[t]||{data:[],count:0,total:e.total};if(n.data[e.n]=new Uint8Array(e.data),n.count++,this._chunkedData[t]=n,n.total===n.count){delete this._chunkedData[t];let e=function(e){let t=0;for(let n of e)t+=n.byteLength;let n=new Uint8Array(t),r=0;for(let t of e)n.set(t,r),r+=t.byteLength;return n}(n.data);this._handleDataMessage({data:e})}}_send(e,t){let n=s(e);return n instanceof Promise?this._send_blob(n):!t&&n.byteLength>this.chunker.chunkedMTU?void this._sendChunks(n):void this._bufferedSend(n)}async _send_blob(e){let t=await e;if(t.byteLength>this.chunker.chunkedMTU)return void this._sendChunks(t);this._bufferedSend(t)}_sendChunks(e){let t=this.chunker.chunk(e);for(let e of(em.log(`DC#${this.connectionId} Try to send ${t.length} chunks...`),t))this.send(e,!0)}constructor(e,t,r){super(e,t,r),this.chunker=new n,this.serialization=eE.Binary,this._chunkedData={}}}class e$ extends eN{_handleDataMessage({data:e}){super.emit("data",e)}_send(e,t){this._bufferedSend(e)}constructor(...e){super(...e),this.serialization=eE.None}}class eV extends eN{_handleDataMessage({data:e}){let t=this.parse(this.decoder.decode(e)),n=t.__peerData;if(n&&"close"===n.type)return void this.close();this.emit("data",t)}_send(e,t){let n=this.encoder.encode(this.stringify(e));if(n.byteLength>=ef.chunkedMTU)return void this.emitError(ew.MessageToBig,"Message too big for JSON channel");this._bufferedSend(n)}constructor(...e){super(...e),this.serialization=eE.JSON,this.encoder=new TextEncoder,this.decoder=new TextDecoder,this.stringify=JSON.stringify,this.parse=JSON.parse}}class eG extends eL{get id(){return this._id}get options(){return this._options}get open(){return this._open}get socket(){return this._socket}get connections(){let e=Object.create(null);for(let[t,n]of this._connections)e[t]=n;return e}get destroyed(){return this._destroyed}get disconnected(){return this._disconnected}_createServerConnection(){let e=new eM(this._options.secure,this._options.host,this._options.port,this._options.path,this._options.key,this._options.pingInterval);return e.on(ex.Message,e=>{this._handleMessage(e)}),e.on(ex.Error,e=>{this._abort(eR.SocketError,e)}),e.on(ex.Disconnected,()=>{this.disconnected||(this.emitError(eR.Network,"Lost connection to server."),this.disconnect())}),e.on(ex.Close,()=>{this.disconnected||this._abort(eR.SocketClosed,"Underlying socket is already closed.")}),e}_initialize(e){this._id=e,this.socket.start(e,this._options.token)}_handleMessage(e){let t=e.type,n=e.payload,r=e.src;switch(t){case eD.Open:this._lastServerId=this.id,this._open=!0,this.emit("open",this.id);break;case eD.Error:this._abort(eR.ServerError,n.msg);break;case eD.IdTaken:this._abort(eR.UnavailableID,`ID "${this.id}" is taken`);break;case eD.InvalidKey:this._abort(eR.InvalidKey,`API KEY "${this._options.key}" is invalid`);break;case eD.Leave:em.log(`Received leave message from ${r}`),this._cleanupPeer(r),this._connections.delete(r);break;case eD.Expire:this.emitError(eR.PeerUnavailable,`Could not connect to peer ${r}`);break;case eD.Offer:{let e=n.connectionId,t=this.getConnection(r,e);if(t&&(t.close(),em.warn(`Offer received for existing Connection ID:${e}`)),n.type===ek.Media){let i=new eB(r,this,{connectionId:e,_payload:n,metadata:n.metadata});t=i,this._addConnection(r,t),this.emit("call",i)}else{if(n.type!==ek.Data)return void em.warn(`Received malformed connection type:${n.type}`);let i=new this._serializers[n.serialization](r,this,{connectionId:e,_payload:n,metadata:n.metadata,label:n.label,serialization:n.serialization,reliable:n.reliable});t=i,this._addConnection(r,t),this.emit("connection",i)}for(let n of this._getMessages(e))t.handleMessage(n);break}default:{if(!n)return void em.warn(`You received a malformed message from ${r} of type ${t}`);let i=n.connectionId,s=this.getConnection(r,i);s&&s.peerConnection?s.handleMessage(e):i?this._storeMessage(i,e):em.warn("You received an unrecognized message:",e)}}}_storeMessage(e,t){this._lostMessages.has(e)||this._lostMessages.set(e,[]),this._lostMessages.get(e).push(t)}_getMessages(e){let t=this._lostMessages.get(e);return t?(this._lostMessages.delete(e),t):[]}connect(e,t={}){if(t={serialization:"default",...t},this.disconnected){em.warn("You cannot connect to a new Peer because you called .disconnect() on this Peer and ended your connection with the server. You can create a new Peer to reconnect, or call reconnect on this peer if you believe its ID to still be available."),this.emitError(eR.Disconnected,"Cannot connect to new Peer after disconnecting from server.");return}let n=new this._serializers[t.serialization](e,this,t);return this._addConnection(e,n),n}call(e,t,n={}){if(this.disconnected){em.warn("You cannot connect to a new Peer because you called .disconnect() on this Peer and ended your connection with the server. You can create a new Peer to reconnect."),this.emitError(eR.Disconnected,"Cannot connect to new Peer after disconnecting from server.");return}if(!t)return void em.error("To call a peer, you must provide a stream from your browser's `getUserMedia`.");let r=new eB(e,this,{...n,_stream:t});return this._addConnection(e,r),r}_addConnection(e,t){em.log(`add connection ${t.type}:${t.connectionId} to peerId:${e}`),this._connections.has(e)||this._connections.set(e,[]),this._connections.get(e).push(t)}_removeConnection(e){let t=this._connections.get(e.peer);if(t){let n=t.indexOf(e);-1!==n&&t.splice(n,1)}this._lostMessages.delete(e.connectionId)}getConnection(e,t){let n=this._connections.get(e);if(!n)return null;for(let e of n)if(e.connectionId===t)return e;return null}_delayedAbort(e,t){setTimeout(()=>{this._abort(e,t)},0)}_abort(e,t){em.error("Aborting!"),this.emitError(e,t),this._lastServerId?this.disconnect():this.destroy()}destroy(){this.destroyed||(em.log(`Destroy peer with ID:${this.id}`),this.disconnect(),this._cleanup(),this._destroyed=!0,this.emit("close"))}_cleanup(){for(let e of this._connections.keys())this._cleanupPeer(e),this._connections.delete(e);this.socket.removeAllListeners()}_cleanupPeer(e){let t=this._connections.get(e);if(t)for(let e of t)e.close()}disconnect(){if(this.disconnected)return;let e=this.id;em.log(`Disconnect peer with ID:${e}`),this._disconnected=!0,this._open=!1,this.socket.close(),this._lastServerId=e,this._id=null,this.emit("disconnected",e)}reconnect(){if(this.disconnected&&!this.destroyed)em.log(`Attempting reconnection to server with ID ${this._lastServerId}`),this._disconnected=!1,this._initialize(this._lastServerId);else if(this.destroyed)throw Error("This peer cannot reconnect to the server. It has already been destroyed.");else if(this.disconnected||this.open)throw Error(`Peer ${this.id} cannot reconnect because it is not disconnected from the server!`);else em.error("In a hurry? We're still trying to make the initial connection!")}listAllPeers(e=e=>{}){this._api.listAllPeers().then(t=>e(t)).catch(e=>this._abort(eR.ServerError,e))}constructor(e,t){let n;if(super(),this._serializers={raw:e$,json:eV,binary:ez,"binary-utf8":ez,default:ez},this._id=null,this._lastServerId=null,this._destroyed=!1,this._disconnected=!1,this._open=!1,this._connections=new Map,this._lostMessages=new Map,e&&e.constructor==Object?t=e:e&&(n=e.toString()),t={debug:0,host:ef.CLOUD_HOST,port:ef.CLOUD_PORT,path:"/",key:eG.DEFAULT_KEY,token:ef.randomToken(),config:ef.defaultConfig,referrerPolicy:"strict-origin-when-cross-origin",serializers:{},...t},this._options=t,this._serializers={...this._serializers,...this.options.serializers},"/"===this._options.host&&(this._options.host=window.location.hostname),this._options.path&&("/"!==this._options.path[0]&&(this._options.path="/"+this._options.path),"/"!==this._options.path[this._options.path.length-1]&&(this._options.path+="/")),void 0===this._options.secure&&this._options.host!==ef.CLOUD_HOST?this._options.secure=ef.isSecure():this._options.host==ef.CLOUD_HOST&&(this._options.secure=!0),this._options.logFunction&&em.setLogFunction(this._options.logFunction),em.logLevel=this._options.debug||0,this._api=new eU(t),this._socket=this._createServerConnection(),!ef.supports.audioVideo&&!ef.supports.data)return void this._delayedAbort(eR.BrowserIncompatible,"The current browser does not support WebRTC");if(n&&!ef.validateId(n))return void this._delayedAbort(eR.InvalidID,`ID "${n}" is invalid`);n?this._initialize(n):this._api.retrieveId().then(e=>this._initialize(e)).catch(e=>this._abort(eR.ServerError,e))}}eG.DEFAULT_KEY="peerjs",window.peerjs={Peer:eG,util:ef},window.Peer=eG})();
+//# sourceMappingURL=peerjs.min.js.map
+</script>
+
+<script>
+"use strict";
+
+// =====================================================================
+// ===== PHYSICS START ==================================================
+// Armbasierte Fortbewegung: Hände bleiben an Oberflächen "kleben",
+// bewegst du die Hand, bewegt sich stattdessen dein Körper.
+// =====================================================================
+const Physics = (() => {
+  const CFG = {
+    gravity: 9.81,
+    handRadius: 0.07,      // Größe der Hand-Kollision (m)
+    contactKeep: 0.03,     // so weit darf die Hand abheben und gilt noch als "dran"
+    releaseDist: 0.004,    // Hand pro Frame so weit von der Fläche weg => loslassen
+    maxHandStep: 0.25,     // Schutz gegen Tracking-Sprünge
+    jumpMultiplier: 1.15,  // Verstärkung beim Abstoßen
+    jumpThreshold: 1.0,    // ab dieser Geschwindigkeit (m/s) wird verstärkt
+    maxJumpSpeed: 6.5,     // maximale Abstoß-Geschwindigkeit
+    historyFrames: 6,      // Frames für die Durchschnitts-Geschwindigkeit
+    bodyOffset: 0.30,      // Körperkugel liegt so weit unter dem Kopf
+    bodyRadius: 0.22,      // Körper-Hitbox
+    headRadius: 0.12,
+    groundFriction: 6,
+    airDrag: 0.05,
+    killY: -25,            // darunter: Respawn
+  };
+
+  const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+  const sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+  const scl = (a, s) => [a[0] * s, a[1] * s, a[2] * s];
+  const dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+  const len = (a) => Math.hypot(a[0], a[1], a[2]);
+
+  // Abstandsfunktionen: Quader {c, h} und Zylinder {c, r, h, a=Achse}
+  function sdBox(p, b) {
+    const q0 = Math.abs(p[0] - b.c[0]) - b.h[0], q1 = Math.abs(p[1] - b.c[1]) - b.h[1], q2 = Math.abs(p[2] - b.c[2]) - b.h[2];
+    return Math.hypot(Math.max(q0, 0), Math.max(q1, 0), Math.max(q2, 0)) + Math.min(Math.max(q0, q1, q2), 0);
+  }
+  function sdCyl(p, b) {
+    const d = [p[0] - b.c[0], p[1] - b.c[1], p[2] - b.c[2]];
+    const i1 = (b.a + 1) % 3, i2 = (b.a + 2) % 3;
+    const dr = Math.hypot(d[i1], d[i2]) - b.r, da = Math.abs(d[b.a]) - b.h;
+    return Math.min(Math.max(dr, da), 0) + Math.hypot(Math.max(dr, 0), Math.max(da, 0));
+  }
+  function sdf(p, colliders) {
+    let m = Infinity;
+    for (const b of colliders) { const d = b.type === 'cyl' ? sdCyl(p, b) : sdBox(p, b); if (d < m) m = d; }
+    return m;
+  }
+  function query(p, colliders) {
+    const d = sdf(p, colliders), e = 0.0015;
+    const n = [
+      sdf([p[0] + e, p[1], p[2]], colliders) - sdf([p[0] - e, p[1], p[2]], colliders),
+      sdf([p[0], p[1] + e, p[2]], colliders) - sdf([p[0], p[1] - e, p[2]], colliders),
+      sdf([p[0], p[1], p[2] + e], colliders) - sdf([p[0], p[1], p[2] - e], colliders),
+    ];
+    const l = len(n);
+    return { dist: d, normal: l > 1e-9 ? scl(n, 1 / l) : [0, 1, 0] };
+  }
+  // Höhe der Fläche direkt unter p (für Schatten); null, wenn keine
+  function groundBelow(p, colliders, maxDrop = 4) {
+    const q = [p[0], p[1], p[2]];
+    for (let k = 0; k < 48; k++) {
+      const d = sdf(q, colliders);
+      if (d < 0.005) return q[1];
+      q[1] -= Math.max(d, 0.01);
+      if (p[1] - q[1] > maxDrop) return null;
+    }
+    return null;
+  }
+
+  function createPlayer(colliders, spawn) {
+    const P = {
+      pos: [...spawn], vel: [0, 0, 0], yaw: 0, grounded: false, events: [], spawn: [...spawn],
+      head: [0, 1.6, 0], hist: [], wasTouching: false,
+      hands: [0, 1].map(i => ({ i, local: null, prevLocal: null, pos: [0, 0, 0], touching: false, normal: [0, 1, 0], active: false })),
+    };
+    const rot = (v) => { const c = Math.cos(P.yaw), s = Math.sin(P.yaw); return [c * v[0] + s * v[2], v[1], -s * v[0] + c * v[2]]; };
+    const toWorld = (l) => add(P.pos, rot(l));
+    P.toWorld = toWorld;
+
+    P.respawn = (headLocal = P.head) => {
+      P.vel = [0, 0, 0]; P.hist.length = 0; P.wasTouching = false;
+      for (const h of P.hands) { h.touching = false; h.prevLocal = null; }
+      const r = rot([headLocal[0], 0, headLocal[2]]);
+      P.pos = [P.spawn[0] - r[0], P.spawn[1], P.spawn[2] - r[2]];
+    };
+
+    // Drehen um den Kopf (Snap-Turn)
+    P.turn = (angle, headLocal = P.head) => {
+      const hw = toWorld(headLocal);
+      P.yaw += angle;
+      P.pos = sub(hw, rot(headLocal));
+    };
+
+    // headLocal / locals: Positionen im Tracking-Raum (Meter, y = Höhe über echtem Boden)
+    P.update = (dt, headLocal, locals) => {
+      dt = Math.min(Math.max(dt, 1e-4), 1 / 30);
+      P.events.length = 0;
+      P.head = headLocal;
+      const start = [...P.pos];
+      const H = P.hands;
+
+      for (let k = 0; k < 2; k++) {
+        const h = H[k], l = locals[k];
+        if (!l) { h.active = false; h.touching = false; h.prevLocal = null; continue; }
+        h.active = true; h.local = l;
+        if (!h.prevLocal) { h.prevLocal = l; h.touching = false; }
+      }
+
+      // 1) Freier Flug, wenn keine Hand festhält
+      const pinned = H.some(h => h.active && h.touching);
+      if (!pinned) {
+        P.vel[1] -= CFG.gravity * dt;
+        const drag = Math.exp(-CFG.airDrag * dt);
+        P.vel[0] *= drag; P.vel[2] *= drag;
+        P.pos = add(P.pos, scl(P.vel, dt));
+      }
+
+      // 2) Festhaltende Hände: Handbewegung => Körper bewegt sich entgegengesetzt
+      let sum = [0, 0, 0], n = 0;
+      for (const h of H) {
+        if (!h.active || !h.touching) continue;
+        let m = rot(sub(h.local, h.prevLocal));
+        if (dot(m, h.normal) > CFG.releaseDist) { h.touching = false; continue; } // Hand hebt ab
+        const L = len(m);
+        if (L > CFG.maxHandStep) m = scl(m, CFG.maxHandStep / L);
+        sum = sub(sum, m); n++;
+      }
+      if (n) P.pos = add(P.pos, scl(sum, 1 / n));
+
+      // 3) Hände können nicht in Oberflächen eindringen => Körper wird weggedrückt
+      for (const h of H) {
+        if (!h.active) continue;
+        const t = toWorld(h.local);
+        const q = query(t, colliders);
+        const r = CFG.handRadius;
+        if (q.dist < r + (h.touching ? 0 : 0.002)) {
+          let corr = scl(q.normal, Math.max(0, r - q.dist));
+          const L = len(corr);
+          if (L > CFG.maxHandStep) corr = scl(corr, CFG.maxHandStep / L);
+          P.pos = add(P.pos, corr);
+          if (!h.touching) {
+            const sp = len(sub(h.local, h.prevLocal)) / dt + len(P.vel) * 0.3;
+            P.events.push({ type: 'touch', hand: h.i, speed: sp });
+          }
+          h.touching = true; h.normal = q.normal; h.pos = add(t, corr);
+        } else if (h.touching && q.dist < r + CFG.contactKeep) {
+          h.pos = t; h.normal = q.normal;
+        } else {
+          h.touching = false; h.pos = t;
+        }
+      }
+
+      // 4) Körper und Kopf kollidieren mit der Welt
+      P.grounded = false;
+      let q = query(sub(toWorld(headLocal), [0, CFG.bodyOffset, 0]), colliders);
+      if (q.dist < CFG.bodyRadius) {
+        P.pos = add(P.pos, scl(q.normal, CFG.bodyRadius - q.dist));
+        const vn = dot(P.vel, q.normal);
+        if (vn < 0) P.vel = sub(P.vel, scl(q.normal, vn));
+        if (q.normal[1] > 0.5) P.grounded = true;
+      }
+      q = query(toWorld(headLocal), colliders);
+      if (q.dist < CFG.headRadius) {
+        P.pos = add(P.pos, scl(q.normal, CFG.headRadius - q.dist));
+        const vn = dot(P.vel, q.normal);
+        if (vn < 0) P.vel = sub(P.vel, scl(q.normal, vn));
+      }
+
+      // 5) Geschwindigkeit: beim Loslassen wird die Schwungbewegung übernommen
+      const anyTouch = H.some(h => h.touching);
+      if (anyTouch) {
+        let inst = scl(sub(P.pos, start), 1 / dt);
+        const il = len(inst);
+        if (il > CFG.maxJumpSpeed) inst = scl(inst, CFG.maxJumpSpeed / il);
+        P.hist.push(inst);
+        if (P.hist.length > CFG.historyFrames) P.hist.shift();
+        P.vel = [...inst];
+      } else if (P.wasTouching) {
+        let avg = [0, 0, 0];
+        for (const v of P.hist) avg = add(avg, v);
+        if (P.hist.length) avg = scl(avg, 1 / P.hist.length);
+        let sp = len(avg);
+        if (sp > CFG.jumpThreshold) { avg = scl(avg, CFG.jumpMultiplier); sp *= CFG.jumpMultiplier; }
+        if (sp > CFG.maxJumpSpeed) avg = scl(avg, CFG.maxJumpSpeed / sp);
+        P.vel = avg; P.hist.length = 0;
+        P.events.push({ type: 'release', speed: len(avg) });
+      }
+      if (P.grounded && !anyTouch) {
+        const f = Math.exp(-CFG.groundFriction * dt);
+        P.vel[0] *= f; P.vel[2] *= f;
+      }
+      P.wasTouching = anyTouch;
+      for (const h of H) if (h.active) h.prevLocal = h.local;
+
+      if (toWorld(headLocal)[1] < CFG.killY) { P.respawn(headLocal); P.events.push({ type: 'respawn' }); }
+    };
+    return P;
+  }
+
+  return { CFG, createPlayer, query, groundBelow, sdf };
+})();
+// ===== PHYSICS END ====================================================
+
+// =====================================================================
+// ===== WORLD START ====================================================
+// Bambusplattform im Wasser
+// =====================================================================
+const HALF = 9;                    // Plattform 18 x 18 m
+const WATER_Y = -1.1;              // Wasserspiegel (Deck-Oberkante = 0)
+const BEAM_R = 0.08;
+const EDGE = HALF - BEAM_R;
+const POST_TOP = 1.3;              // Eckpfosten ragen so hoch über das Deck
+const SIGN = { z: -(HALF - 0.45), y: 1.3, w: 2.3, h: 1.0, poleX: 1.22, poleTop: 2.05 };
+const SPAWN = [0, 0.3, 2];
+
+const COLLIDERS = [
+  { type: 'box', c: [0, -0.05, 0], h: [HALF, 0.05, HALF] },              // Deck
+  { type: 'cyl', a: 0, c: [0, 0, EDGE], r: BEAM_R, h: HALF },            // Randbalken
+  { type: 'cyl', a: 0, c: [0, 0, -EDGE], r: BEAM_R, h: HALF },
+  { type: 'cyl', a: 2, c: [EDGE, 0, 0], r: BEAM_R, h: HALF },
+  { type: 'cyl', a: 2, c: [-EDGE, 0, 0], r: BEAM_R, h: HALF },
+];
+for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+  COLLIDERS.push({ type: 'cyl', a: 1, c: [sx * EDGE, (POST_TOP + WATER_Y - 2) / 2, sz * EDGE], r: 0.09, h: (POST_TOP - WATER_Y + 2) / 2 });
+}
+for (const sx of [-1, 1]) {
+  COLLIDERS.push({ type: 'cyl', a: 1, c: [sx * SIGN.poleX, SIGN.poleTop / 2, SIGN.z], r: 0.06, h: SIGN.poleTop / 2 });
+}
+COLLIDERS.push({ type: 'box', c: [0, SIGN.y, SIGN.z], h: [SIGN.w / 2, SIGN.h / 2, 0.03] });
+// ===== WORLD END ======================================================
+
+Physics.CFG.killY = WATER_Y - 0.25;   // Kopf unter Wasser => zurück auf die Plattform
+const player = Physics.createPlayer(COLLIDERS, SPAWN);
+
+const COLORS = [
+  [0.86, 0.26, 0.22], [0.95, 0.55, 0.16], [0.95, 0.82, 0.22], [0.32, 0.72, 0.32],
+  [0.20, 0.70, 0.78], [0.26, 0.46, 0.90], [0.62, 0.36, 0.86], [0.92, 0.45, 0.68], [0.42, 0.30, 0.22],
+];
+let myColor = Math.floor(Math.random() * COLORS.length);
+try { const s = parseInt(localStorage.getItem('affenplatte-farbe'), 10); if (s >= 0 && s < COLORS.length) myColor = s; } catch (e) {}
+
+// ---------------------------------------------------------------------
+// Multiplayer: einer erstellt einen Raum (Host), die anderen treten mit
+// dem Code bei. Der Host leitet alle Positionen an alle weiter.
+// ---------------------------------------------------------------------
+const Net = (() => {
+  const PREFIX = 'affenplatte-v1-';
+  const ALPHA = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+  const MAX_PLAYERS = 10;
+  let peer = null, role = 'solo', code = '', hostConn = null, myId = '', gen = 0, hostCount = 1;
+  const conns = new Map();     // nur Host: id -> Verbindung
+  const players = new Map();   // id -> { cur, target, color, last }
+  let onStatus = () => {}, onCount = () => {};
+
+  const randomCode = () => Array.from({ length: 4 }, () => ALPHA[Math.floor(Math.random() * ALPHA.length)]).join('');
+  const peerOpts = () => Object.assign({ debug: 0 }, window.__PEER_OPTS || {});
+  const count = () => role === 'host' ? conns.size + 1 : role === 'client' ? hostCount : 1;
+  const emitCount = () => onCount(count());
+
+  const v3 = a => Array.isArray(a) && a.length === 3 && a.every(x => Number.isFinite(x) && Math.abs(x) < 1e4);
+  const valid = d => d && typeof d === 'object' && v3(d.h) && Array.isArray(d.q) && d.q.length === 4 && d.q.every(Number.isFinite)
+    && (d.l === null || v3(d.l)) && (d.r === null || v3(d.r)) && Number.isInteger(d.c);
+
+  function setPlayer(id, d) {
+    let p = players.get(id);
+    if (!p) { if (players.size >= MAX_PLAYERS) return; p = { id, cur: null }; players.set(id, p); }
+    p.target = { h: d.h, q: d.q, l: d.l, r: d.r };
+    p.color = ((d.c % COLORS.length) + COLORS.length) % COLORS.length;
+    p.last = performance.now();
+    if (!p.cur) p.cur = { h: [...d.h], q: [...d.q], l: d.l && [...d.l], r: d.r && [...d.r] };
+  }
+  function broadcast(msg, except) {
+    for (const [id, c] of conns) if (id !== except && c.open) { try { c.send(msg); } catch (e) {} }
+  }
+  function drop(id) {
+    if (!conns.has(id)) return;
+    conns.delete(id); players.delete(id);
+    broadcast({ t: 'leave', id }); broadcast({ t: 'n', n: count() });
+    emitCount();
+  }
+  function errorText(e) {
+    const t = (e && e.type) || e;
+    if (t === 'peer-unavailable') return 'Raum nicht gefunden. Stimmt der Code?';
+    if (t === 'timeout') return 'Keine Antwort vom Raum. Versuch es nochmal.';
+    if (t === 'browser-incompatible') return 'Dieser Browser kann kein Multiplayer.';
+    if (t === 'network' || t === 'server-error' || t === 'socket-error' || t === 'socket-closed')
+      return 'Keine Verbindung zum Multiplayer-Server. Versuch es gleich nochmal.';
+    return 'Verbindung fehlgeschlagen (' + t + ').';
+  }
+  function fail(e) { leave(); onStatus('idle', errorText(e)); }
+
+  function host() {
+    leave();
+    const g = ++gen;
+    role = 'busy';
+    onStatus('busy', 'Erstelle Raum …');
+    const attempt = (n) => {
+      code = randomCode();
+      const p = new Peer(PREFIX + code, peerOpts());
+      peer = p;
+      p.on('open', id => {
+        if (g !== gen) return;
+        myId = id; role = 'host';
+        onStatus('room', 'Sag deinen Freunden den Code. Sie tippen ihn bei „Beitreten" ein.');
+        emitCount();
+      });
+      p.on('connection', conn => {
+        if (g !== gen) return;
+        conn.on('open', () => {
+          if (g !== gen) return;
+          if (conns.size >= MAX_PLAYERS - 1) { try { conn.send({ t: 'full' }); } catch (e) {} setTimeout(() => conn.close(), 300); return; }
+          conns.set(conn.peer, conn);
+          broadcast({ t: 'n', n: count() });
+          emitCount();
+        });
+        conn.on('data', d => { if (g === gen) fromClient(conn.peer, d); });
+        conn.on('close', () => { if (g === gen) drop(conn.peer); });
+        conn.on('error', () => { if (g === gen) drop(conn.peer); });
+      });
+      p.on('disconnected', () => { if (g === gen && role === 'host') { try { p.reconnect(); } catch (e) {} } });
+      p.on('error', e => {
+        if (g !== gen) return;
+        if (e.type === 'unavailable-id' && n < 4) { p.destroy(); attempt(n + 1); return; }
+        if (e.type === 'peer-unavailable') return;
+        fail(e);
+      });
+    };
+    attempt(0);
+  }
+
+  function join(c) {
+    leave();
+    const g = ++gen;
+    code = c; role = 'busy';
+    onStatus('busy', 'Verbinde mit Raum ' + c + ' …');
+    const p = new Peer(peerOpts());
+    peer = p;
+    const timer = setTimeout(() => { if (g === gen && role === 'busy') fail('timeout'); }, 15000);
+    p.on('open', id => {
+      if (g !== gen) return;
+      myId = id;
+      const conn = p.connect(PREFIX + c, { serialization: 'json' });
+      hostConn = conn;
+      conn.on('open', () => {
+        if (g !== gen) return;
+        clearTimeout(timer); role = 'client';
+        onStatus('room', 'Verbunden! Starte VR, um die anderen zu sehen.');
+        emitCount();
+      });
+      conn.on('data', d => { if (g === gen) fromHost(d); });
+      conn.on('close', () => { if (g === gen && role === 'client') { leave(); onStatus('idle', 'Der Raum wurde geschlossen.'); } });
+    });
+    p.on('error', e => { if (g !== gen) return; clearTimeout(timer); fail(e); });
+  }
+
+  function fromClient(id, d) {
+    if (!d || d.t !== 's' || !valid(d)) return;
+    setPlayer(id, d);
+    broadcast({ t: 's', id, h: d.h, q: d.q, l: d.l, r: d.r, c: d.c }, id);
+  }
+  function fromHost(d) {
+    if (!d || typeof d !== 'object') return;
+    if (d.t === 's' && typeof d.id === 'string' && d.id !== myId && valid(d)) setPlayer(d.id, d);
+    else if (d.t === 'leave' && typeof d.id === 'string') players.delete(d.id);
+    else if (d.t === 'n' && Number.isInteger(d.n)) { hostCount = d.n; emitCount(); }
+    else if (d.t === 'full') { leave(); onStatus('idle', 'Der Raum ist voll.'); }
+  }
+
+  function leave() {
+    gen++;
+    if (peer) { try { peer.destroy(); } catch (e) {} }
+    peer = null; hostConn = null; conns.clear(); players.clear();
+    role = 'solo'; code = ''; myId = ''; hostCount = 1;
+    emitCount();
+  }
+
+  function sendState(s) {
+    if (role === 'host') broadcast({ t: 's', id: myId, h: s.h, q: s.q, l: s.l, r: s.r, c: s.c });
+    else if (role === 'client' && hostConn && hostConn.open) { try { hostConn.send({ t: 's', h: s.h, q: s.q, l: s.l, r: s.r, c: s.c }); } catch (e) {} }
+  }
+
+  // Weich zu den empfangenen Positionen gleiten
+  function update(dt) {
+    const k = 1 - Math.exp(-dt * 14), now = performance.now();
+    const lerp = (a, b) => { for (let i = 0; i < a.length; i++) a[i] += (b[i] - a[i]) * k; };
+    for (const [id, p] of players) {
+      if (now - p.last > 5000) { players.delete(id); continue; }
+      const c = p.cur, t = p.target;
+      lerp(c.h, t.h);
+      let d = 0; for (let i = 0; i < 4; i++) d += c.q[i] * t.q[i];
+      const tq = d < 0 ? t.q.map(x => -x) : t.q;
+      lerp(c.q, tq);
+      const ql = Math.hypot(...c.q) || 1; for (let i = 0; i < 4; i++) c.q[i] /= ql;
+      for (const side of ['l', 'r']) {
+        if (!t[side]) c[side] = null;
+        else if (!c[side]) c[side] = [...t[side]];
+        else lerp(c[side], t[side]);
+      }
+    }
+  }
+
+  return {
+    host, join, leave, sendState, update, players,
+    get role() { return role; }, get code() { return code; }, get count() { return count(); },
+    set onStatus(f) { onStatus = f; }, set onCount(f) { onCount = f; },
+    available: typeof window.Peer === 'function',
+  };
+})();
+
+// ---------------------------------------------------------------------
+// Mathe (Matrizen spaltenweise wie in WebGL)
+// ---------------------------------------------------------------------
+const V = {
+  add: (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]],
+  sub: (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]],
+  scl: (a, s) => [a[0] * s, a[1] * s, a[2] * s],
+  dot: (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2],
+  cross: (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]],
+  norm: (a) => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; },
+};
+const M4 = {
+  mul(a, b) {
+    const o = new Float32Array(16);
+    for (let c = 0; c < 4; c++) for (let r = 0; r < 4; r++) {
+      o[c * 4 + r] = a[r] * b[c * 4] + a[4 + r] * b[c * 4 + 1] + a[8 + r] * b[c * 4 + 2] + a[12 + r] * b[c * 4 + 3];
+    }
+    return o;
+  },
+  trs(t, s) { return new Float32Array([s[0], 0, 0, 0, 0, s[1], 0, 0, 0, 0, s[2], 0, t[0], t[1], t[2], 1]); },
+  rotY(a) { const c = Math.cos(a), s = Math.sin(a); return new Float32Array([c, 0, -s, 0, 0, 1, 0, 0, s, 0, c, 0, 0, 0, 0, 1]); },
+  translate(x, y, z) { return M4.trs([x, y, z], [1, 1, 1]); },
+  fromQuat(q, t, s) {
+    const [x, y, z, w] = q;
+    return new Float32Array([
+      (1 - 2 * (y * y + z * z)) * s[0], 2 * (x * y + w * z) * s[0], 2 * (x * z - w * y) * s[0], 0,
+      2 * (x * y - w * z) * s[1], (1 - 2 * (x * x + z * z)) * s[1], 2 * (y * z + w * x) * s[1], 0,
+      2 * (x * z + w * y) * s[2], 2 * (y * z - w * x) * s[2], (1 - 2 * (x * x + y * y)) * s[2], 0,
+      t[0], t[1], t[2], 1]);
+  },
+  perspective(fovy, aspect, near, far) {
+    const f = 1 / Math.tan(fovy / 2), nf = 1 / (near - far);
+    return new Float32Array([f / aspect, 0, 0, 0, 0, f, 0, 0, 0, 0, (far + near) * nf, -1, 0, 0, 2 * far * near * nf, 0]);
+  },
+  lookAt(e, t, up) {
+    const f = V.norm(V.sub(t, e)), s = V.norm(V.cross(f, up)), u = V.cross(s, f);
+    return new Float32Array([s[0], u[0], -f[0], 0, s[1], u[1], -f[1], 0, s[2], u[2], -f[2], 0, -V.dot(s, e), -V.dot(u, e), V.dot(f, e), 1]);
+  },
+};
+// Zylinder entlang Achse a (0=x, 1=y, 2=z), Radius r, halbe Länge h
+function cylModel(c, a, r, h) {
+  const L = 2 * h;
+  if (a === 1) return M4.trs(c, [r, L, r]);
+  if (a === 0) return new Float32Array([0, -r, 0, 0, L, 0, 0, 0, 0, 0, r, 0, c[0], c[1], c[2], 1]);
+  return new Float32Array([r, 0, 0, 0, 0, 0, L, 0, 0, -r, 0, 0, c[0], c[1], c[2], 1]);
+}
+// Zylinder von Punkt a nach Punkt b
+function segModel(a, b, r) {
+  const d = V.sub(b, a), L = Math.hypot(d[0], d[1], d[2]) || 1e-6;
+  const y = V.scl(d, 1 / L);
+  const x = V.norm(V.cross(y, Math.abs(y[1]) < 0.9 ? [0, 1, 0] : [1, 0, 0]));
+  const z = V.cross(x, y), c = V.scl(V.add(a, b), 0.5);
+  return new Float32Array([x[0] * r, x[1] * r, x[2] * r, 0, y[0] * L, y[1] * L, y[2] * L, 0, z[0] * r, z[1] * r, z[2] * r, 0, c[0], c[1], c[2], 1]);
+}
+function qrot(q, v) { // Vektor mit Quaternion drehen
+  const [x, y, z, w] = q;
+  const ix = w * v[0] + y * v[2] - z * v[1], iy = w * v[1] + z * v[0] - x * v[2];
+  const iz = w * v[2] + x * v[1] - y * v[0], iw = -x * v[0] - y * v[1] - z * v[2];
+  return [ix * w + iw * -x + iy * -z - iz * -y, iy * w + iw * -y + iz * -x - ix * -z, iz * w + iw * -z + ix * -y - iy * -x];
+}
+function qmul(a, b) {
+  return [
+    a[3] * b[0] + a[0] * b[3] + a[1] * b[2] - a[2] * b[1],
+    a[3] * b[1] - a[0] * b[2] + a[1] * b[3] + a[2] * b[0],
+    a[3] * b[2] + a[0] * b[1] - a[1] * b[0] + a[2] * b[3],
+    a[3] * b[3] - a[0] * b[0] - a[1] * b[1] - a[2] * b[2],
+  ];
+}
+const yawQuat = (y) => [0, Math.sin(y / 2), 0, Math.cos(y / 2)];
+
+// ---------------------------------------------------------------------
+// WebGL
+// ---------------------------------------------------------------------
+const canvas = document.getElementById('c');
+const gl = canvas.getContext('webgl2', { xrCompatible: true, antialias: true });
+const $ = (id) => document.getElementById(id);
+const ui = $('ui'), btn = $('vr'), msg = $('msg');
+if (!gl) { msg.textContent = 'WebGL 2 wird von diesem Browser nicht unterstützt.'; throw new Error('no webgl2'); }
+
+const ATTRS = ['aPos', 'aNor', 'aCol', 'aExt', 'aBones', 'aWeights', 'aI0', 'aI1'];
+function shader(type, src) {
+  const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s);
+  if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s));
+  return s;
+}
+function program(vs, fs, names) {
+  const p = gl.createProgram();
+  gl.attachShader(p, shader(gl.VERTEX_SHADER, vs)); gl.attachShader(p, shader(gl.FRAGMENT_SHADER, fs));
+  ATTRS.forEach((n, i) => gl.bindAttribLocation(p, i, n));
+  gl.linkProgram(p);
+  if (!gl.getProgramParameter(p, gl.LINK_STATUS)) throw new Error(gl.getProgramInfoLog(p));
+  const u = {};
+  for (const n of names) u[n] = gl.getUniformLocation(p, n);
+  return { p, u };
+}
+
+const SKY_HORIZON = [0.70, 0.86, 0.92];
+const FOG_DENSITY = 0.006;
+const GLSL_COMMON = `
+const vec3 SUN = normalize(vec3(0.45, 0.62, 0.35));
+const vec3 HORIZON = vec3(${SKY_HORIZON.join(', ')});
+vec3 skyBase(vec3 d) {
+  vec3 zen = vec3(0.13, 0.40, 0.82), low = vec3(0.42, 0.64, 0.72);
+  vec3 c = d.y > 0.0 ? mix(HORIZON, zen, pow(d.y, 0.5)) : mix(HORIZON, low, pow(-d.y, 0.4));
+  float s = max(dot(d, SUN), 0.0);
+  return c + vec3(1.0, 0.95, 0.82) * (pow(s, 800.0) * 2.0 + pow(s, 10.0) * 0.16);
+}
+float hash12(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453); }
+float vnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash12(i), hash12(i + vec2(1, 0)), f.x), mix(hash12(i + vec2(0, 1)), hash12(i + vec2(1, 1)), f.x), f.y);
+}
+float hash13(vec3 p) { return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453); }
+float vnoise3(vec3 p) {
+  vec3 i = floor(p), f = fract(p); f = f * f * (3.0 - 2.0 * f);
+  return mix(mix(mix(hash13(i), hash13(i + vec3(1, 0, 0)), f.x), mix(hash13(i + vec3(0, 1, 0)), hash13(i + vec3(1, 1, 0)), f.x), f.y),
+             mix(mix(hash13(i + vec3(0, 0, 1)), hash13(i + vec3(1, 0, 1)), f.x), mix(hash13(i + vec3(0, 1, 1)), hash13(i + vec3(1, 1, 1)), f.x), f.y), f.z);
+}
+`;
+
+// Plattform, Schild, Schatten
+const litProg = program(`#version 300 es
+in vec3 aPos; in vec3 aNor;
+uniform mat4 uModel, uView, uProj;
+out vec3 vWorld; out vec3 vNor; out vec3 vView;
+void main() {
+  vec4 w = uModel * vec4(aPos, 1.0);
+  vWorld = w.xyz; vNor = mat3(uModel) * aNor;
+  vec4 v = uView * w; vView = v.xyz;
+  gl_Position = uProj * v;
+}`, `#version 300 es
+precision highp float;
+in vec3 vWorld; in vec3 vNor; in vec3 vView;
+uniform vec3 uColor, uFog, uAxis, uEye;
+uniform float uEmissive, uAlpha, uSeed, uFogDensity;
+uniform int uMode;
+out vec4 outColor;
+${GLSL_COMMON}
+float hash1(float n) { return fract(sin(n * 127.1) * 43758.5453); }
+float shade(vec3 n) { return max(dot(n, SUN), 0.0) * 0.75 + 0.36 + max(n.y, 0.0) * 0.06; }
+void main() {
+  vec3 n = normalize(vNor);
+  vec3 col = uColor;
+  float light;
+  float gloss = 0.0;
+  float W = 0.1;
+  float zc = vWorld.z / W;
+  float fwz = fwidth(zc);
+  if (uMode == 1) {
+    // Deck aus Bambusstangen, die entlang X liegen
+    float i = floor(zc);
+    float s = fract(zc) * 2.0 - 1.0;
+    float h = hash1(i + 0.5);
+    col = mix(vec3(0.82, 0.69, 0.41), vec3(0.70, 0.60, 0.32), h);
+    if (n.y > 0.5) {
+      col *= 0.93 + 0.07 * sin(vWorld.x * (0.7 + h) + h * 20.0);
+      float node = fract((vWorld.x + h * 7.0) / 0.45);
+      float nd = min(node, 1.0 - node) * 0.45;
+      col *= mix(0.62, 1.0, smoothstep(0.004, 0.012, nd));
+      col *= 1.0 + 0.08 * (1.0 - smoothstep(0.012, 0.03, nd));
+      float rope = abs(fract(vWorld.x / 3.0) - 0.5) * 3.0;
+      if (rope < 0.035) {
+        col = vec3(0.36, 0.25, 0.14) * (0.8 + 0.2 * sin((vWorld.x * 0.7 + vWorld.z) * 140.0));
+        s *= 0.5;
+      }
+      vec3 fn = normalize(vec3(0.0, sqrt(max(1.0 - s * s * 0.85, 0.0)), s));
+      light = shade(fn);
+      light *= 1.0 - 0.55 * smoothstep(0.86, 0.98, abs(s));
+      light = mix(light, shade(n) * 0.9, smoothstep(0.3, 0.8, fwz));
+      gloss = 0.12;
+    } else if (abs(n.x) > 0.5) {
+      float yy = (vWorld.y + 0.05) / 0.05;
+      float r = length(vec2(s, yy));
+      col = r < 0.55 ? vec3(0.22, 0.15, 0.08) : (r < 0.95 ? vec3(0.86, 0.76, 0.52) : vec3(0.30, 0.22, 0.12));
+      light = shade(n);
+    } else {
+      light = shade(n);
+    }
+  } else if (uMode == 2) {
+    // Bambusrohr mit Knoten
+    float t = dot(vWorld, uAxis) + uSeed;
+    float node = fract(t / 0.5);
+    float nd = min(node, 1.0 - node) * 0.5;
+    col *= 0.94 + 0.06 * sin(t * 3.0 + uSeed * 5.0);
+    col *= mix(0.58, 1.0, smoothstep(0.006, 0.016, nd));
+    col *= 1.0 + 0.1 * (1.0 - smoothstep(0.016, 0.04, nd));
+    light = shade(n);
+    gloss = 0.18;
+  } else {
+    light = shade(n);
+  }
+  vec3 toEye = normalize(uEye - vWorld);
+  float spec = pow(max(dot(reflect(-SUN, n), toEye), 0.0), 24.0) * gloss;
+  col = col * light + spec + uColor * uEmissive;
+  float fog = 1.0 - exp(-length(vView) * uFogDensity);
+  outColor = vec4(mix(col, uFog, fog), uAlpha);
+}`, ['uModel', 'uView', 'uProj', 'uColor', 'uFog', 'uAxis', 'uEye', 'uEmissive', 'uAlpha', 'uSeed', 'uFogDensity', 'uMode']);
+
+// Affen: Mesh mit Knochen (Skinning), Fell-Shading, Augen
+const charProg = program(`#version 300 es
+in vec3 aPos; in vec3 aNor; in vec3 aCol; in vec2 aExt; in vec4 aBones; in vec4 aWeights;
+uniform mat4 uBones[5]; uniform mat4 uView, uProj;
+out vec3 vWorld; out vec3 vNor; out vec3 vView; out vec3 vObj; out vec3 vCol; out vec2 vFur; out float vBodyW;
+void main() {
+  mat4 m = uBones[int(aBones.x)] * aWeights.x + uBones[int(aBones.y)] * aWeights.y
+         + uBones[int(aBones.z)] * aWeights.z + uBones[int(aBones.w)] * aWeights.w;
+  vec4 w = m * vec4(aPos, 1.0);
+  vWorld = w.xyz; vNor = mat3(m) * aNor; vObj = aPos; vCol = aCol; vFur = aExt;
+  vBodyW = (int(aBones.x) == 0 ? aWeights.x : 0.0) + (int(aBones.y) == 0 ? aWeights.y : 0.0) + (int(aBones.z) == 0 ? aWeights.z : 0.0);
+  vec4 v = uView * w; vView = v.xyz;
+  gl_Position = uProj * v;
+}`, `#version 300 es
+precision highp float;
+in vec3 vWorld; in vec3 vNor; in vec3 vView; in vec3 vObj; in vec3 vCol; in vec2 vFur; in float vBodyW;
+uniform vec3 uColor, uFog, uEye; uniform float uFogDensity, uHide, uFlash; uniform int uPart;
+out vec4 outColor;
+${GLSL_COMMON}
+void main() {
+  if (uHide > 0.5 && vBodyW > 0.5) discard;
+  vec3 n = normalize(vNor);
+  vec3 v = normalize(uEye - vWorld);
+  vec3 col; float spec; float fur = vFur.x;
+  if (fur < -0.5) {
+    // Auge: weiß, braune Iris, schwarze Pupille
+    vec3 on = normalize(vObj - vCol);
+    float d = -on.z;
+    col = d > 0.93 ? vec3(0.02) : (d > 0.80 ? vec3(0.32, 0.18, 0.07) : vec3(0.94, 0.93, 0.89));
+    spec = pow(max(dot(reflect(-SUN, n), v), 0.0), 80.0) * 1.2;
+    fur = 0.0;
+  } else {
+    float nz = vnoise3(vObj * 70.0) * 0.6 + vnoise3(vObj * 170.0) * 0.4;
+    vec3 furCol = uColor * vFur.y * (0.84 + 0.3 * nz);
+    col = mix(vCol, furCol, fur);
+    if (uPart == 1 && fur < 0.7) {
+      vec3 o = vObj;
+      for (int i = 0; i < 2; i++) { // Nasenlöcher
+        float sx = i == 0 ? -1.0 : 1.0;
+        float k = smoothstep(1.0, 0.55, length(vec2((o.x - sx * 0.017) / 0.0105, (o.y + 0.021) / 0.0068))) * smoothstep(-0.125, -0.142, o.z);
+        col = mix(col, vec3(0.09, 0.06, 0.05), k);
+      }
+      float my = -0.075 + 4.0 * o.x * o.x; // Mund (leichtes Lächeln)
+      float k = smoothstep(0.0042, 0.0012, abs(o.y - my)) * smoothstep(0.046, 0.036, abs(o.x)) * smoothstep(-0.105, -0.12, o.z);
+      col = mix(col, vec3(0.13, 0.08, 0.07), k);
+    }
+    spec = pow(max(dot(reflect(-SUN, n), v), 0.0), 18.0) * 0.14 * (1.0 - fur);
+  }
+  float ndl = dot(n, SUN);
+  float light = max((ndl + 0.35) / 1.35, 0.0) * 0.72 + 0.32 + max(n.y, 0.0) * 0.06;
+  float rim = pow(1.0 - max(dot(n, v), 0.0), 2.5) * 0.32 * fur;
+  col = col * light + rim * (uColor * 0.55 + 0.22) + spec + uFlash * 0.18;
+  float fog = 1.0 - exp(-length(vView) * uFogDensity);
+  outColor = vec4(mix(col, uFog, fog), 1.0);
+}`, ['uBones', 'uView', 'uProj', 'uColor', 'uFog', 'uEye', 'uFogDensity', 'uHide', 'uFlash', 'uPart']);
+
+// Pflanzen und Gelände (mit Instancing und Wind)
+const vegProg = program(`#version 300 es
+in vec3 aPos; in vec3 aNor; in vec3 aCol; in vec2 aExt; in vec4 aI0; in vec4 aI1;
+uniform mat4 uView, uProj; uniform float uTime;
+out vec3 vWorld; out vec3 vNor; out vec3 vCol; out vec3 vView; out float vLeafy;
+void main() {
+  float c = cos(aI0.w), s = sin(aI0.w);
+  vec3 p = aPos * vec3(aI1.x, aI1.x * aI1.y, aI1.x);
+  p = vec3(c * p.x + s * p.z, p.y, -s * p.x + c * p.z);
+  vec3 n = vec3(c * aNor.x + s * aNor.z, aNor.y, -s * aNor.x + c * aNor.z);
+  float ph = aI1.w;
+  vec3 wind = vec3(sin(uTime * 1.3 + ph + p.y * 0.3) + 0.4 * sin(uTime * 3.1 + ph * 2.0), 0.0,
+                   cos(uTime * 1.05 + ph * 1.7 + p.x * 0.2));
+  p += wind * aExt.x * 0.07 * aI1.x;
+  vec3 w = p + aI0.xyz;
+  vWorld = w; vNor = n;
+  vCol = aCol * (1.0 + aI1.z * vec3(0.16, 0.08, -0.12));
+  vLeafy = aExt.y;
+  vec4 v = uView * vec4(w, 1.0); vView = v.xyz;
+  gl_Position = uProj * v;
+}`, `#version 300 es
+precision highp float;
+in vec3 vWorld; in vec3 vNor; in vec3 vCol; in vec3 vView; in float vLeafy;
+uniform vec3 uFog; uniform float uFogDensity, uLeafScale;
+out vec4 outColor;
+${GLSL_COMMON}
+void main() {
+  vec3 n = normalize(vNor);
+  if (!gl_FrontFacing) n = -n;
+  vec3 col = vCol;
+  float ndl = dot(n, SUN);
+  float light = max(ndl, 0.0) * 0.68 + 0.36 + max(n.y, 0.0) * 0.06;
+  if (vLeafy > 0.0) {
+    // Blätter-Struktur für Baumkronen und ferne Dschungel-Hügel
+    vec3 q = vWorld * uLeafScale;
+    float b = vnoise3(q) * 0.55 + vnoise3(q * 2.9) * 0.3 + vnoise3(q * 7.3) * 0.15;
+    float bb = smoothstep(0.25, 0.75, b);
+    col = mix(col, col * mix(0.35, 1.5, bb), vLeafy);
+    light = mix(light, light * (0.55 + 0.7 * bb), vLeafy);
+  }
+  col = col * light + col * vec3(0.5, 0.85, 0.25) * max(-ndl, 0.0) * 0.3;
+  float fog = 1.0 - exp(-length(vView) * uFogDensity);
+  outColor = vec4(mix(col, uFog, fog), 1.0);
+}`, ['uView', 'uProj', 'uTime', 'uFog', 'uFogDensity', 'uLeafScale']);
+
+const skyProg = program(`#version 300 es
+in vec3 aPos;
+uniform mat4 uView, uProj; uniform vec3 uCenter;
+out vec3 vDir;
+void main() { vDir = aPos; gl_Position = uProj * uView * vec4(aPos * 400.0 + uCenter, 1.0); }
+`, `#version 300 es
+precision highp float;
+in vec3 vDir; uniform float uTime;
+out vec4 outColor;
+${GLSL_COMMON}
+float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { s += a * vnoise(p); p *= 2.03; a *= 0.5; } return s; }
+void main() {
+  vec3 d = normalize(vDir);
+  vec3 c = skyBase(d);
+  if (d.y > 0.0) {
+    vec2 cp = d.xz / (d.y + 0.12) * 1.3 + vec2(uTime * 0.004, 0.0);
+    float cl = smoothstep(0.52, 0.80, fbm(cp)) * smoothstep(0.0, 0.2, d.y);
+    c = mix(c, vec3(0.97, 0.98, 1.0) * (0.9 + 0.1 * d.y), cl * 0.85);
+  }
+  outColor = vec4(c, 1.0);
+}`, ['uView', 'uProj', 'uCenter', 'uTime']);
+
+// ---------------------------------------------------------------------
+// Gelände: Lagune mit Ufer und Hügeln, dazu kleine Inseln
+// ---------------------------------------------------------------------
+const ISLANDS = [{ x: 17, z: -17, r: 3.6 }, { x: -21, z: 12, r: 4.4 }, { x: 3, z: 23.5, r: 3.0 }];
+const shoreR = (th) => 36 + 3.2 * Math.sin(3 * th + 1.3) + 2.2 * Math.sin(5 * th + 0.4) + 1.3 * Math.sin(9 * th + 2.1);
+const GLSL_SHORE = `
+uniform vec3 uIslands[3];
+float shoreR(float th) { return 36.0 + 3.2 * sin(3.0 * th + 1.3) + 2.2 * sin(5.0 * th + 0.4) + 1.3 * sin(9.0 * th + 2.1); }
+float landDist(vec2 p) {
+  float s = length(p) - shoreR(atan(p.y, p.x));
+  for (int i = 0; i < 3; i++) s = max(s, uIslands[i].z - length(p - uIslands[i].xy));
+  return s;
+}`;
+
+const waterProg = program(`#version 300 es
+in vec3 aPos;
+uniform mat4 uView, uProj; uniform vec3 uCenter; uniform float uSize, uY;
+out vec3 vWorld; out vec3 vView;
+void main() {
+  vec4 w = vec4(aPos.x * uSize + uCenter.x, uY, aPos.z * uSize + uCenter.z, 1.0);
+  vWorld = w.xyz;
+  vec4 v = uView * w; vView = v.xyz;
+  gl_Position = uProj * v;
+}`, `#version 300 es
+precision highp float;
+in vec3 vWorld; in vec3 vView;
+uniform vec3 uEye, uFog; uniform float uTime, uHalf, uFogDensity;
+out vec4 outColor;
+${GLSL_COMMON}
+${GLSL_SHORE}
+void addWave(inout vec2 g, vec2 p, vec2 dir, float k, float w, float a) {
+  vec2 d = normalize(dir);
+  g += d * (a * k * cos(dot(d, p) * k + uTime * w));
+}
+void main() {
+  vec2 p = vWorld.xz;
+  float dist = length(vView);
+  vec2 g = vec2(0.0);
+  addWave(g, p, vec2(1.0, 0.3), 0.9, 1.1, 0.05);
+  addWave(g, p, vec2(-0.4, 1.0), 1.7, 1.6, 0.025);
+  addWave(g, p, vec2(0.7, -0.8), 3.1, 2.3, 0.011);
+  addWave(g, p, vec2(-0.9, -0.2), 5.3, 3.1, 0.006);
+  addWave(g, p, vec2(0.2, 0.9), 9.0, 4.2, 0.003);
+  float fade = 1.0 / (1.0 + dist * 0.04);
+  vec3 n = normalize(vec3(-g.x * fade, 1.0, -g.y * fade));
+  vec3 Vd = normalize(vWorld - uEye);
+  vec3 R = reflect(Vd, n); R.y = abs(R.y);
+  float facing = max(dot(-Vd, n), 0.0);
+  float fres = 0.02 + 0.98 * pow(1.0 - facing, 5.0);
+  vec3 base = mix(vec3(0.03, 0.22, 0.27), vec3(0.06, 0.42, 0.44), facing * 0.7);
+  // flaches, türkises Wasser am Ufer
+  float s = landDist(p);
+  base = mix(base, vec3(0.12, 0.58, 0.52), smoothstep(-10.0, -1.0, s) * 0.85);
+  base = mix(base, vec3(0.52, 0.62, 0.45), smoothstep(-1.6, 0.0, s) * 0.6);
+  // Schatten unter der Plattform
+  vec2 q = abs(p) - vec2(uHalf);
+  float sd = length(max(q, 0.0)) + min(max(q.x, q.y), 0.0);
+  base *= mix(0.42, 1.0, smoothstep(-0.8, 0.6, sd));
+  vec3 col = mix(base, skyBase(R), fres);
+  col += vec3(1.0, 0.95, 0.85) * pow(max(dot(R, SUN), 0.0), 300.0) * 2.0 * fade;
+  // Schaum an der Plattform und am Ufer
+  float fn = sin(p.x * 7.0 + uTime * 1.3) * sin(p.y * 6.0 - uTime * 1.1) + 0.5 * sin((p.x + p.y) * 11.0 + uTime * 2.0);
+  float band = 1.0 - smoothstep(0.0, 0.32, abs(sd - 0.04));
+  float shoreBand = 1.0 - smoothstep(0.0, 0.7, abs(s + 0.25 + 0.15 * sin(uTime * 0.8 + p.x * 0.3)));
+  band = max(band, shoreBand * 0.8);
+  float foam = band * smoothstep(-0.4, 0.9, fn + band);
+  col = mix(col, vec3(0.92, 0.96, 0.97), clamp(foam * 0.55, 0.0, 1.0));
+  float fog = 1.0 - exp(-dist * uFogDensity);
+  outColor = vec4(mix(col, uFog, fog), 1.0);
+}`, ['uView', 'uProj', 'uCenter', 'uSize', 'uY', 'uEye', 'uFog', 'uTime', 'uHalf', 'uFogDensity', 'uIslands']);
+
+const texProg = program(`#version 300 es
+in vec3 aPos;
+uniform mat4 uModel, uView, uProj;
+out vec2 vUV; out vec3 vView; out vec3 vNor;
+void main() {
+  vUV = aPos.xy + 0.5;
+  vNor = mat3(uModel) * vec3(0.0, 0.0, 1.0);
+  vec4 v = uView * uModel * vec4(aPos, 1.0); vView = v.xyz;
+  gl_Position = uProj * v;
+}`, `#version 300 es
+precision highp float;
+in vec2 vUV; in vec3 vView; in vec3 vNor;
+uniform sampler2D uTex; uniform vec3 uFog; uniform float uFogDensity;
+out vec4 outColor;
+${GLSL_COMMON}
+void main() {
+  vec3 c = texture(uTex, vUV).rgb * (0.72 + 0.3 * max(dot(normalize(vNor), SUN), 0.0));
+  float fog = 1.0 - exp(-length(vView) * uFogDensity);
+  outColor = vec4(mix(c, uFog, fog), 1.0);
+}`, ['uModel', 'uView', 'uProj', 'uTex', 'uFog', 'uFogDensity']);
+
+// Mesh aus Positionen, Normalen und weiteren Attributen
+function mesh(pos, nor, idx, extra = [], fixWinding = true) {
+  if (fixWinding) { // Dreiecke nach außen drehen (für Backface-Culling)
+    for (let i = 0; i < idx.length; i += 3) {
+      const a = idx[i] * 3, b = idx[i + 1] * 3, c = idx[i + 2] * 3;
+      const e1 = [pos[b] - pos[a], pos[b + 1] - pos[a + 1], pos[b + 2] - pos[a + 2]];
+      const e2 = [pos[c] - pos[a], pos[c + 1] - pos[a + 1], pos[c + 2] - pos[a + 2]];
+      const n = [nor[a] + nor[b] + nor[c], nor[a + 1] + nor[b + 1] + nor[c + 1], nor[a + 2] + nor[b + 2] + nor[c + 2]];
+      if (V.dot(V.cross(e1, e2), n) < 0) { const t = idx[i + 1]; idx[i + 1] = idx[i + 2]; idx[i + 2] = t; }
+    }
+  }
+  const vao = gl.createVertexArray(); gl.bindVertexArray(vao);
+  const attr = (loc, data, size) => {
+    const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
+    gl.bufferData(gl.ARRAY_BUFFER, data instanceof Float32Array ? data : new Float32Array(data), gl.STATIC_DRAW);
+    gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, size, gl.FLOAT, false, 0, 0);
+  };
+  attr(0, pos, 3); attr(1, nor, 3);
+  for (const e of extra) attr(e.loc, e.data, e.size);
+  const big = pos.length / 3 > 65535;
+  const ib = gl.createBuffer(); gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, ib);
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, big ? new Uint32Array(idx) : new Uint16Array(idx), gl.STATIC_DRAW);
+  gl.bindVertexArray(null);
+  return { vao, count: idx.length, type: big ? gl.UNSIGNED_INT : gl.UNSIGNED_SHORT, tris: idx.length / 3, instances: 1 };
+}
+function setInstances(m, data) {
+  gl.bindVertexArray(m.vao);
+  const b = gl.createBuffer(); gl.bindBuffer(gl.ARRAY_BUFFER, b);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(data), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(6); gl.vertexAttribPointer(6, 4, gl.FLOAT, false, 32, 0); gl.vertexAttribDivisor(6, 1);
+  gl.enableVertexAttribArray(7); gl.vertexAttribPointer(7, 4, gl.FLOAT, false, 32, 16); gl.vertexAttribDivisor(7, 1);
+  gl.bindVertexArray(null);
+  m.instances = data.length / 8;
+}
+function draw(m) { gl.bindVertexArray(m.vao); gl.drawElements(gl.TRIANGLES, m.count, m.type, 0); }
+function boxMesh() { // Würfel -0.5..0.5
+  const P = [], N = [], I = [];
+  for (const n of [[1, 0, 0], [-1, 0, 0], [0, 1, 0], [0, -1, 0], [0, 0, 1], [0, 0, -1]]) {
+    const u = n[1] !== 0 ? [1, 0, 0] : [0, 1, 0];
+    const v = V.cross(n, u);
+    const b = P.length / 3;
+    for (const [a, c] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+      P.push(0.5 * (n[0] + a * u[0] + c * v[0]), 0.5 * (n[1] + a * u[1] + c * v[1]), 0.5 * (n[2] + a * u[2] + c * v[2]));
+      N.push(...n);
+    }
+    I.push(b, b + 1, b + 2, b, b + 2, b + 3);
+  }
+  return mesh(P, N, I);
+}
+function sphereData(R = 14, S = 20) { // Radius 1
+  const P = [], I = [];
+  for (let i = 0; i <= R; i++) {
+    const th = i / R * Math.PI;
+    for (let j = 0; j <= S; j++) {
+      const ph = j / S * Math.PI * 2;
+      P.push(Math.sin(th) * Math.cos(ph), Math.cos(th), Math.sin(th) * Math.sin(ph));
+    }
+  }
+  for (let i = 0; i < R; i++) for (let j = 0; j < S; j++) {
+    const a = i * (S + 1) + j, b = a + S + 1;
+    I.push(a, a + 1, b, b, a + 1, b + 1);
+  }
+  return { P, I };
+}
+function cylMesh(seg = 14) { // Radius 1, Länge 1 entlang Y
+  const P = [], N = [], I = [];
+  for (let j = 0; j <= seg; j++) {
+    const a = j / seg * Math.PI * 2, x = Math.cos(a), z = Math.sin(a);
+    P.push(x, -0.5, z, x, 0.5, z); N.push(x, 0, z, x, 0, z);
+  }
+  for (let j = 0; j < seg; j++) { const k = j * 2; I.push(k, k + 1, k + 2, k + 1, k + 3, k + 2); }
+  for (const yy of [-0.5, 0.5]) {
+    const c = P.length / 3, ny = Math.sign(yy);
+    P.push(0, yy, 0); N.push(0, ny, 0);
+    for (let j = 0; j <= seg; j++) { const a = j / seg * Math.PI * 2; P.push(Math.cos(a), yy, Math.sin(a)); N.push(0, ny, 0); }
+    for (let j = 0; j < seg; j++) I.push(c, c + 1 + j, c + 2 + j);
+  }
+  return mesh(P, N, I);
+}
+const BOX = boxMesh(), CYL = cylMesh();
+const SPHERE = (() => { const s = sphereData(); return mesh(s.P, s.P, s.I); })();
+const QUAD = mesh([-0.5, -0.5, 0, 0.5, -0.5, 0, 0.5, 0.5, 0, -0.5, 0.5, 0], [0, 0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1], [0, 1, 2, 0, 2, 3]);
+const PLANE = mesh([-1, 0, -1, 1, 0, -1, 1, 0, 1, -1, 0, 1], [0, 1, 0, 0, 1, 0, 0, 1, 0, 0, 1, 0], [0, 1, 2, 0, 2, 3]);
+
+// ---------------------------------------------------------------------
+// Werkzeuge zum Modellieren: Zufall, Rauschen, Abstandsfunktionen
+// ---------------------------------------------------------------------
+function makeRng(seed) {
+  return () => { seed |= 0; seed = seed + 0x6D2B79F5 | 0; let t = Math.imul(seed ^ seed >>> 15, 1 | seed); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+}
+function hash3i(x, y, z) {
+  let h = Math.imul(x, 374761393) ^ Math.imul(y, 668265263) ^ Math.imul(z, 1274126177);
+  h = Math.imul(h ^ (h >>> 13), 1274126177);
+  return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
+}
+function noise3(x, y, z) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const s = (t) => t * t * (3 - 2 * t);
+  const fx = s(x - xi), fy = s(y - yi), fz = s(z - zi);
+  const L = (a, b, t) => a + (b - a) * t;
+  const h = (i, j, k) => hash3i(xi + i, yi + j, zi + k);
+  return L(L(L(h(0, 0, 0), h(1, 0, 0), fx), L(h(0, 1, 0), h(1, 1, 0), fx), fy),
+           L(L(h(0, 0, 1), h(1, 0, 1), fx), L(h(0, 1, 1), h(1, 1, 1), fx), fy), fz);
+}
+const fbm2 = (x, z) => noise3(x, 0.5, z) * 0.5 + noise3(x * 2.1, 1.5, z * 2.1) * 0.3 + noise3(x * 4.3, 2.5, z * 4.3) * 0.2;
+const clamp = (x, a, b) => Math.min(Math.max(x, a), b);
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const mixv = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+
+const SD = {
+  smin(a, b, k) { const h = Math.max(k - Math.abs(a - b), 0) / k; return Math.min(a, b) - h * h * k * 0.25; },
+  smax(a, b, k) { return -SD.smin(-a, -b, k); },
+  ell(p, c, r) {
+    const x = (p[0] - c[0]) / r[0], y = (p[1] - c[1]) / r[1], z = (p[2] - c[2]) / r[2];
+    const k0 = Math.hypot(x, y, z), k1 = Math.hypot(x / r[0], y / r[1], z / r[2]);
+    return k1 > 1e-9 ? k0 * (k0 - 1) / k1 : -Math.min(r[0], r[1], r[2]);
+  },
+  // Ellipsoid mit eigenen Achsen (ax = [X, Y, Z] Einheitsvektoren)
+  ellAx(p, c, ax, r) {
+    const d = V.sub(p, c);
+    return SD.ell([V.dot(d, ax[0]), V.dot(d, ax[1]), V.dot(d, ax[2])], [0, 0, 0], r);
+  },
+  cap(p, a, b, ra, rb = ra) {
+    const ba = V.sub(b, a), pa = V.sub(p, a);
+    const t = clamp(V.dot(pa, ba) / V.dot(ba, ba), 0, 1);
+    return Math.hypot(pa[0] - ba[0] * t, pa[1] - ba[1] * t, pa[2] - ba[2] * t) - (ra + (rb - ra) * t);
+  },
+  sph(p, c, r) { return Math.hypot(p[0] - c[0], p[1] - c[1], p[2] - c[2]) - r; },
+};
+
+// Glatte Oberfläche aus einer Abstandsfunktion erzeugen (Surface Nets)
+function polygonize(f, min, max, step) {
+  const nx = Math.ceil((max[0] - min[0]) / step) + 1, ny = Math.ceil((max[1] - min[1]) / step) + 1, nz = Math.ceil((max[2] - min[2]) / step) + 1;
+  const val = new Float32Array(nx * ny * nz);
+  const id = (x, y, z) => x + nx * (y + ny * z);
+  for (let z = 0; z < nz; z++) for (let y = 0; y < ny; y++) for (let x = 0; x < nx; x++) {
+    val[id(x, y, z)] = f([min[0] + x * step, min[1] + y * step, min[2] + z * step]);
+  }
+  const cx = nx - 1, cy = ny - 1, cz = nz - 1;
+  const cell = new Int32Array(cx * cy * cz).fill(-1);
+  const cid = (x, y, z) => x + cx * (y + cy * z);
+  const C = [[0, 0, 0], [1, 0, 0], [0, 1, 0], [1, 1, 0], [0, 0, 1], [1, 0, 1], [0, 1, 1], [1, 1, 1]];
+  const E = [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]];
+  const cv = new Float64Array(8), P = [];
+  for (let z = 0; z < cz; z++) for (let y = 0; y < cy; y++) for (let x = 0; x < cx; x++) {
+    let mask = 0;
+    for (let c = 0; c < 8; c++) { const v = val[id(x + C[c][0], y + C[c][1], z + C[c][2])]; cv[c] = v; if (v < 0) mask |= 1 << c; }
+    if (mask === 0 || mask === 255) continue;
+    let sx = 0, sy = 0, sz = 0, n = 0;
+    for (const [a, b] of E) {
+      const va = cv[a], vb = cv[b];
+      if ((va < 0) === (vb < 0)) continue;
+      const t = va / (va - vb), A = C[a], B = C[b];
+      sx += A[0] + (B[0] - A[0]) * t; sy += A[1] + (B[1] - A[1]) * t; sz += A[2] + (B[2] - A[2]) * t; n++;
+    }
+    cell[cid(x, y, z)] = P.length / 3;
+    P.push(min[0] + (x + sx / n) * step, min[1] + (y + sy / n) * step, min[2] + (z + sz / n) * step);
+  }
+  const I = [];
+  const quad = (a, b, c, d) => { if (a < 0 || b < 0 || c < 0 || d < 0) return; I.push(a, b, c, a, c, d); };
+  for (let z = 1; z < cz; z++) for (let y = 1; y < cy; y++) for (let x = 0; x < cx; x++) {
+    if ((val[id(x, y, z)] < 0) !== (val[id(x + 1, y, z)] < 0)) quad(cell[cid(x, y - 1, z - 1)], cell[cid(x, y, z - 1)], cell[cid(x, y, z)], cell[cid(x, y - 1, z)]);
+  }
+  for (let z = 1; z < cz; z++) for (let y = 0; y < cy; y++) for (let x = 1; x < cx; x++) {
+    if ((val[id(x, y, z)] < 0) !== (val[id(x, y + 1, z)] < 0)) quad(cell[cid(x - 1, y, z - 1)], cell[cid(x, y, z - 1)], cell[cid(x, y, z)], cell[cid(x - 1, y, z)]);
+  }
+  for (let z = 0; z < cz; z++) for (let y = 1; y < cy; y++) for (let x = 1; x < cx; x++) {
+    if ((val[id(x, y, z)] < 0) !== (val[id(x, y, z + 1)] < 0)) quad(cell[cid(x - 1, y - 1, z)], cell[cid(x, y - 1, z)], cell[cid(x, y, z)], cell[cid(x - 1, y, z)]);
+  }
+  // Punkte auf die Oberfläche ziehen und Normalen berechnen
+  const N = new Array(P.length), e = step * 0.5;
+  const grad = (p) => V.norm([f([p[0] + e, p[1], p[2]]) - f([p[0] - e, p[1], p[2]]), f([p[0], p[1] + e, p[2]]) - f([p[0], p[1] - e, p[2]]), f([p[0], p[1], p[2] + e]) - f([p[0], p[1], p[2] - e])]);
+  for (let i = 0; i < P.length; i += 3) {
+    let p = [P[i], P[i + 1], P[i + 2]];
+    for (let k = 0; k < 2; k++) { const d = f(p); const n = grad(p); p = V.sub(p, V.scl(n, clamp(d, -step, step))); }
+    const n = grad(p);
+    P[i] = p[0]; P[i + 1] = p[1]; P[i + 2] = p[2];
+    N[i] = n[0]; N[i + 1] = n[1]; N[i + 2] = n[2];
+  }
+  return { P, N, I };
+}
+
+// ---------------------------------------------------------------------
+// Der Affe: Kopf, Körper mit Armen, Hände, Augen
+// Ursprung = Kopfmitte, Blick nach -Z, oben = +Y
+// ---------------------------------------------------------------------
+function solveIK(S, T, L1, L2, pole) {
+  let d = V.sub(T, S), D = Math.hypot(d[0], d[1], d[2]);
+  if (D < 1e-5) { d = [0, -1, 0]; D = 1e-5; }
+  const dir = V.scl(d, 1 / D);
+  const k = D > (L1 + L2) * 0.999 ? Math.min(D / ((L1 + L2) * 0.999), 1.6) : 1;   // Arm darf sich etwas strecken
+  const a1 = L1 * k, a2 = L2 * k;
+  const Dc = clamp(D, Math.abs(a1 - a2) + 1e-3, (a1 + a2) * 0.999);
+  const a = (a1 * a1 - a2 * a2 + Dc * Dc) / (2 * Dc), hh = Math.sqrt(Math.max(a1 * a1 - a * a, 0));
+  let pp = V.sub(pole, V.scl(dir, V.dot(pole, dir)));
+  if (Math.hypot(pp[0], pp[1], pp[2]) < 1e-4) pp = V.cross(dir, [1, 0, 0]);
+  pp = V.norm(pp);
+  return { E: V.add(S, V.add(V.scl(dir, a), V.scl(pp, hh))), W: V.add(S, V.scl(dir, Dc)), k, planeN: V.norm(V.cross(pp, dir)) };
+}
+function boneFrame(origin, from, to, planeN, scale = 1) {
+  const X = V.norm(V.sub(to, from));
+  const Y = V.norm(V.sub(planeN, V.scl(X, V.dot(planeN, X))));
+  const Z = V.cross(X, Y);
+  return new Float32Array([X[0] * scale, X[1] * scale, X[2] * scale, 0, Y[0], Y[1], Y[2], 0, Z[0], Z[1], Z[2], 0, origin[0], origin[1], origin[2], 1]);
+}
+function rigidInverse(m) {
+  const t = [m[12], m[13], m[14]];
+  const r = [[m[0], m[1], m[2]], [m[4], m[5], m[6]], [m[8], m[9], m[10]]];
+  return new Float32Array([r[0][0], r[1][0], r[2][0], 0, r[0][1], r[1][1], r[2][1], 0, r[0][2], r[1][2], r[2][2], 0,
+    -V.dot(r[0], t), -V.dot(r[1], t), -V.dot(r[2], t), 1]);
+}
+const xf = (m, p) => [m[0] * p[0] + m[4] * p[1] + m[8] * p[2] + m[12], m[1] * p[0] + m[5] * p[1] + m[9] * p[2] + m[13], m[2] * p[0] + m[6] * p[1] + m[10] * p[2] + m[14]];
+const xfDir = (m, p) => [m[0] * p[0] + m[4] * p[1] + m[8] * p[2], m[1] * p[0] + m[5] * p[1] + m[9] * p[2], m[2] * p[0] + m[6] * p[1] + m[10] * p[2]];
+
+const APE = (() => {
+  const L1 = 0.285, L2 = 0.28, HAND_OFF = 0.075;
+  const arms = [-1, 1].map(s => {
+    const S = [s * 0.2, -0.2, 0.04], target = [s * 0.33, -0.73, -0.07], pole = V.norm([s * 0.7, -0.35, 0.62]);
+    const ik = solveIK(S, target, L1, L2, pole);
+    const bindUpper = boneFrame(S, S, ik.E, ik.planeN), bindFore = boneFrame(ik.E, ik.E, ik.W, ik.planeN), bindHand = boneFrame(ik.W, ik.E, ik.W, ik.planeN);
+    return { s, S, E: ik.E, W: ik.W, pole, planeN: ik.planeN, invUpper: rigidInverse(bindUpper), invFore: rigidInverse(bindFore), invHand: rigidInverse(bindHand) };
+  });
+
+  // --- Körper (ohne Kopf) ---
+  function torso(p) {
+    let d = SD.cap(p, [0, -0.07, 0.02], [0, -0.17, 0.035], 0.075);
+    d = SD.smin(d, SD.ell(p, [0, -0.27, 0.035], [0.2, 0.15, 0.15]), 0.06);
+    d = SD.smin(d, SD.cap(p, [-0.15, -0.18, 0.045], [0.15, -0.18, 0.045], 0.085), 0.05);
+    d = SD.smin(d, SD.ell(p, [0, -0.39, 0.0], [0.175, 0.16, 0.145]), 0.07);
+    d = SD.smin(d, SD.ell(p, [0, -0.5, 0.06], [0.165, 0.095, 0.135]), 0.06);
+    return d;
+  }
+  function armSd(p, a) {
+    const up = SD.cap(p, a.S, a.E, 0.084, 0.062);
+    const mid = V.add(a.E, V.scl(V.sub(a.W, a.E), 0.35));
+    const fore = SD.smin(SD.cap(p, a.E, mid, 0.064, 0.074), SD.cap(p, mid, a.W, 0.074, 0.054), 0.03);
+    return SD.smin(up, fore, 0.03);
+  }
+  const bodySd = (p) => SD.smin(torso(p), Math.min(armSd(p, arms[0]), armSd(p, arms[1])), 0.045);
+
+  // --- Kopf ---
+  const EYES = [[-0.04, 0.012, -0.1], [0.04, 0.012, -0.1]];
+  function headSd(p) {
+    let d = SD.ell(p, [0, 0.01, 0.01], [0.105, 0.115, 0.11]);
+    d = SD.smin(d, SD.ell(p, [0, 0.07, 0.035], [0.045, 0.065, 0.08]), 0.045);                       // Scheitelkamm
+    d = SD.smin(d, SD.cap(p, [-0.055, 0.032, -0.083], [0.055, 0.032, -0.083], 0.028), 0.03);        // Stirnwulst
+    d = SD.smin(d, SD.ell(p, [0, -0.045, -0.085], [0.075, 0.058, 0.06]), 0.04);                     // Schnauze
+    d = SD.smin(d, SD.ell(p, [0, -0.012, -0.133], [0.036, 0.022, 0.02]), 0.018);                    // Nase
+    for (const sx of [-1, 1]) d = SD.smin(d, SD.sph(p, [sx * 0.06, -0.02, -0.06], 0.045), 0.03);    // Wangen
+    d = SD.smin(d, SD.ell(p, [0, -0.088, -0.07], [0.062, 0.034, 0.05]), 0.03);                      // Kinn
+    for (const sx of [-1, 1]) d = SD.smin(d, SD.ell(p, [sx * 0.108, 0.0, 0.012], [0.018, 0.032, 0.028]), 0.014); // Ohren
+    for (const e of EYES) d = SD.smax(d, -SD.sph(p, e, 0.026), 0.01);                               // Augenhöhlen
+    return d;
+  }
+  const SKIN = [0.42, 0.33, 0.28];
+  function headColor(p) {
+    // Gesicht hautfarben, Rest Fell
+    const ex = p[0] / 0.085, ey = (p[1] + 0.03) / 0.088;
+    let face = smooth(-0.055, -0.085, p[2]) * (1 - smooth(0.85, 1.05, Math.hypot(ex, ey)));
+    for (const sx of [-1, 1]) {   // Innenohr
+      const d = Math.hypot(p[0] - sx * 0.118, p[1], p[2] - 0.006);
+      face = Math.max(face, (1 - smooth(0.012, 0.024, d)) * 0.8);
+    }
+    return { col: SKIN, fur: 1 - face, tone: 0.95 };
+  }
+
+  // --- Hände (Faust zum Knöchelgang) ---
+  function handSd(a) {
+    const X = V.norm(V.sub(a.W, a.E));                  // Richtung Unterarm
+    let F = V.sub([0, 0, -1], V.scl(X, -X[2]));         // nach vorne
+    F = V.norm(F);
+    const side = V.cross(X, F), inner = V.scl(side, -a.s);
+    const HS = 1.25, at = (x, f, sd) => V.add(a.W, V.add(V.scl(X, x * HS), V.add(V.scl(F, f * HS), V.scl(side, sd * HS))));
+    const fingers = [-0.033, -0.011, 0.011, 0.033].map((o, i) => {
+      const len = i === 0 || i === 3 ? 0.9 : 1;
+      const k0 = at(0.088, 0.004, o), k1 = at(0.088 + 0.03 * len, -0.012, o * 1.05), k2 = at(0.098 + 0.03 * len, -0.04 * len, o * 1.05);
+      return [k0, k1, k2];
+    });
+    const t0 = V.add(at(0.03, -0.012, 0), V.scl(inner, 0.042 * HS)), t1 = V.add(at(0.072, -0.034, 0), V.scl(inner, 0.04 * HS));
+    const f = (p) => {
+      let d = SD.ellAx(p, at(0.05, -0.004, 0), [side, X, F], [0.05 * HS, 0.056 * HS, 0.034 * HS]);
+      d = SD.smin(d, SD.cap(p, at(-0.05, 0, 0), at(0.015, 0, 0), 0.05), 0.02);
+      for (const [k0, k1, k2] of fingers) {
+        d = SD.smin(d, Math.min(SD.cap(p, k0, k1, 0.021, 0.02), SD.cap(p, k1, k2, 0.02, 0.017)), 0.011);
+      }
+      d = SD.smin(d, SD.cap(p, t0, t1, 0.021, 0.018), 0.014);
+      return d;
+    };
+    const color = (p) => {
+      const along = V.dot(V.sub(p, a.W), X);
+      return { col: [0.25, 0.2, 0.18], fur: 1 - smooth(-0.012, 0.018, along), tone: 0.9 };
+    };
+    return { f, color };
+  }
+
+  function build(sdf, min, max, step, colorFn, bonesFn) {
+    const g = polygonize(sdf, min, max, step);
+    const nv = g.P.length / 3;
+    const col = new Float32Array(nv * 3), ext = new Float32Array(nv * 2), bones = new Float32Array(nv * 4), wts = new Float32Array(nv * 4);
+    for (let i = 0; i < nv; i++) {
+      const p = [g.P[i * 3], g.P[i * 3 + 1], g.P[i * 3 + 2]];
+      const c = colorFn(p);
+      col.set(c.col, i * 3); ext[i * 2] = c.fur; ext[i * 2 + 1] = c.tone;
+      const b = bonesFn ? bonesFn(p) : { idx: [0, 0, 0, 0], w: [1, 0, 0, 0] };
+      bones.set(b.idx, i * 4); wts.set(b.w, i * 4);
+    }
+    return { P: g.P, N: g.N, I: g.I, col, ext, bones, wts };
+  }
+  const toMesh = (d) => mesh(d.P, d.N, d.I, [
+    { loc: 2, data: d.col, size: 3 }, { loc: 3, data: d.ext, size: 2 }, { loc: 4, data: d.bones, size: 4 }, { loc: 5, data: d.wts, size: 4 }]);
+
+  // Gewichte: wie stark folgt ein Punkt Körper, Oberarm oder Unterarm
+  function bodyBones(p) {
+    const k = p[0] < 0 ? 0 : 1, a = arms[k];
+    const dArm = Math.min(SD.cap(p, a.S, a.E, 0), SD.cap(p, a.E, a.W, 0)) - 0.066;
+    const armness = smooth(-0.025, 0.035, torso(p) - dArm);
+    const bis = V.norm(V.add(V.norm(V.sub(a.E, a.S)), V.norm(V.sub(a.W, a.E))));
+    const fore = smooth(-0.04, 0.04, V.dot(V.sub(p, a.E), bis));
+    return { idx: [0, 1 + k * 2, 2 + k * 2, 0], w: [1 - armness, armness * (1 - fore), armness * fore, 0] };
+  }
+
+  const body = build(bodySd, [-0.48, -0.66, -0.24], [0.48, 0.12, 0.26], 0.02,
+    (p) => {
+      const belly = smooth(-0.02, -0.1, p[2]) * smooth(-0.2, -0.26, p[1]) * (1 - smooth(0.1, 0.16, Math.abs(p[0])));
+      return { col: SKIN, fur: 1, tone: 1 + 0.22 * belly };
+    }, bodyBones);
+  const head = build(headSd, [-0.15, -0.14, -0.17], [0.15, 0.17, 0.15], 0.0105, headColor);
+  // Augen in das Kopf-Mesh einfügen
+  {
+    const s = sphereData(10, 14), r = 0.021, base = head.P.length / 3;
+    const P = [...head.P], N = [...head.N], I = [...head.I];
+    const col = [...head.col], ext = [...head.ext], bones = [...head.bones], wts = [...head.wts];
+    for (let e = 0; e < 2; e++) {
+      const off = base + e * (s.P.length / 3);
+      for (let i = 0; i < s.P.length; i += 3) {
+        const n = [s.P[i], s.P[i + 1], s.P[i + 2]];
+        P.push(EYES[e][0] + n[0] * r, EYES[e][1] + n[1] * r, EYES[e][2] + n[2] * r); N.push(...n);
+        col.push(...EYES[e]); ext.push(-1, 0); bones.push(0, 0, 0, 0); wts.push(1, 0, 0, 0);
+      }
+      for (const i of s.I) I.push(off + i);
+    }
+    Object.assign(head, { P, N, I, col, ext, bones, wts });
+  }
+  const hands = arms.map(a => {
+    const h = handSd(a), c = a.W;
+    return build(h.f, [c[0] - 0.13, c[1] - 0.2, c[2] - 0.13], [c[0] + 0.13, c[1] + 0.2, c[2] + 0.13], 0.0095, h.color);
+  });
+  const meshes = { body: toMesh(body), head: toMesh(head), hands: hands.map(toMesh) };
+
+  // Pose berechnen: Kopf, Körper, Arme (IK) aus Kopf- und Handpositionen
+  const bones = new Float32Array(80);
+  function pose(h, q, hands) {
+    const fwd = qrot(q, [0, 0, -1]);
+    const yaw = Math.atan2(-fwd[0], -fwd[2]);
+    const lean = clamp(Math.asin(clamp(fwd[1], -1, 1)) * 0.35, -0.3, 0.25);
+    const bq = qmul(yawQuat(yaw), [Math.sin(lean / 2), 0, 0, Math.cos(lean / 2)]);
+    const bodyM = M4.fromQuat(bq, h, [1, 1, 1]);
+    bones.set(bodyM, 0);
+    const handMats = [];
+    for (let k = 0; k < 2; k++) {
+      const a = arms[k];
+      const S = xf(bodyM, a.S), pole = xfDir(bodyM, a.pole);
+      let target = hands[k];
+      if (!target) target = xf(bodyM, V.add(a.W, V.scl(V.norm(V.sub(a.W, a.S)), HAND_OFF)));
+      const toT = V.sub(target, S), dT = Math.hypot(toT[0], toT[1], toT[2]) || 1;
+      const wristT = V.sub(target, V.scl(toT, HAND_OFF / dT));
+      const ik = solveIK(S, wristT, L1, L2, pole);
+      bones.set(M4.mul(boneFrame(S, S, ik.E, ik.planeN, ik.k), a.invUpper), (1 + k * 2) * 16);
+      bones.set(M4.mul(boneFrame(ik.E, ik.E, ik.W, ik.planeN, ik.k), a.invFore), (2 + k * 2) * 16);
+      handMats.push(M4.mul(boneFrame(ik.W, ik.E, ik.W, ik.planeN), a.invHand));
+    }
+    return { bones, hands: handMats, head: M4.fromQuat(q, h, [1, 1, 1]) };
+  }
+  return { meshes, pose };
+})();
+
+// ---------------------------------------------------------------------
+// Pflanzen-Modelle (alles aus Dreiecken, ohne Texturen)
+// ---------------------------------------------------------------------
+function Geo() { return { P: [], N: [], C: [], E: [], I: [] }; }
+function gv(g, p, n, c, sway, leafy = 0) {
+  g.P.push(p[0], p[1], p[2]); g.N.push(n[0], n[1], n[2]); g.C.push(c[0], c[1], c[2]); g.E.push(sway, leafy);
+  return g.P.length / 3 - 1;
+}
+const geoMesh = (g) => mesh(g.P, g.N, g.I, [{ loc: 2, data: g.C, size: 3 }, { loc: 3, data: g.E, size: 2 }], false);
+const triN = (a, b, c) => V.norm(V.cross(V.sub(b, a), V.sub(c, a)));
+
+// Röhre entlang eines Pfades (Stämme, Äste, Stängel)
+function tube(g, pts, radii, sides, colorFn, swayFn) {
+  const rings = [];
+  for (let i = 0; i < pts.length; i++) {
+    const t = V.norm(V.sub(pts[Math.min(i + 1, pts.length - 1)], pts[Math.max(i - 1, 0)]));
+    const ref = Math.abs(t[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0];
+    const nx = V.norm(V.cross(t, ref)), ny = V.cross(nx, t);
+    const ring = [];
+    for (let j = 0; j <= sides; j++) {
+      const a = j / sides * Math.PI * 2, d = V.add(V.scl(nx, Math.cos(a)), V.scl(ny, Math.sin(a)));
+      ring.push(gv(g, V.add(pts[i], V.scl(d, radii[i])), d, colorFn(i / (pts.length - 1), j), swayFn(i / (pts.length - 1))));
+    }
+    rings.push(ring);
+  }
+  for (let i = 0; i < rings.length - 1; i++) for (let j = 0; j < sides; j++) {
+    const a = rings[i][j], b = rings[i][j + 1], c = rings[i + 1][j + 1], d = rings[i + 1][j];
+    g.I.push(a, b, c, a, c, d);
+  }
+}
+// Breites Blatt mit Mittelrippe, hängt nach unten durch
+function leafBlade(g, base, dir, up, L, W, droop, cBase, cTip, sw0, sw1, segs = 5) {
+  const side = V.norm(V.cross(dir, up));
+  let prev = null;
+  for (let i = 0; i <= segs; i++) {
+    const t = i / segs;
+    const c = V.add(base, V.add(V.scl(dir, L * t), V.scl(up, -droop * L * t * t)));
+    const w = W * Math.sin(Math.PI * Math.pow(t, 0.75));
+    const tg = V.norm(V.add(V.scl(dir, L), V.scl(up, -2 * droop * L * t)));
+    const n = V.norm(V.cross(side, tg));
+    const col = mixv(cBase, cTip, t), sw = sw0 + (sw1 - sw0) * t, fold = V.scl(n, w * 0.22);
+    const l = gv(g, V.add(c, V.add(V.scl(side, -w), fold)), n, V.scl(col, 0.92), sw);
+    const m = gv(g, c, n, V.scl(col, 1.18), sw);
+    const r = gv(g, V.add(c, V.add(V.scl(side, w), fold)), n, V.scl(col, 0.92), sw);
+    if (prev) g.I.push(prev.l, l, m, prev.l, m, prev.m, prev.m, m, r, prev.m, r, prev.r);
+    prev = { l, m, r };
+  }
+}
+// Fiederblatt (Farn, Palmwedel): Mittelstiel mit vielen schmalen Blättchen
+function frond(g, base, dir, L, elev, droop, pairs, leafLen, leafDroop, cBase, cTip, swayBase) {
+  const up = [0, 1, 0];
+  const pathAt = (t) => V.add(base, V.add(V.scl(dir, Math.cos(elev) * L * t), V.scl(up, (Math.sin(elev) * t - droop * t * t) * L)));
+  let prevA = null, prevB = null;
+  for (let i = 0; i <= 8; i++) { // Stiel
+    const t = i / 8, p = pathAt(t), side = V.norm(V.cross(dir, up));
+    const a = gv(g, V.add(p, V.scl(side, -0.012 * (1 - t) - 0.003)), up, cBase, swayBase * t);
+    const b = gv(g, V.add(p, V.scl(side, 0.012 * (1 - t) + 0.003)), up, cBase, swayBase * t);
+    if (prevA !== null) g.I.push(prevA, a, b, prevA, b, prevB);
+    prevA = a; prevB = b;
+  }
+  for (let k = 0; k < pairs; k++) {
+    const t = 0.12 + 0.86 * k / pairs, p = pathAt(t), p2 = pathAt(Math.min(1, t + 0.8 / pairs));
+    const tg = V.norm(V.sub(p2, p)), side = V.norm(V.cross(tg, up));
+    const len = leafLen * (0.25 + 0.75 * Math.sin(Math.PI * Math.min(1, t * 1.05))) * L;
+    const col = mixv(cBase, cTip, t), sw = swayBase * (0.3 + 0.7 * t);
+    for (const s of [-1, 1]) {
+      const tip = V.add(p, V.add(V.scl(side, s * len), V.add(V.scl(tg, len * 0.35), [0, -len * leafDroop, 0])));
+      const b2 = V.add(p, V.scl(V.sub(p2, p), 0.9));
+      const n = triN(p, b2, tip);
+      const ia = gv(g, p, n, col, sw), ib = gv(g, b2, n, col, sw), ic = gv(g, tip, n, V.scl(col, 1.12), sw * 1.3);
+      g.I.push(ia, ib, ic);
+    }
+  }
+}
+// Unebene Kugel für Baumkronen
+function blob(g, c, r, squash, rng, cA, cB, sway, levels = 2) {
+  const t = (1 + Math.sqrt(5)) / 2;
+  let verts = [[-1, t, 0], [1, t, 0], [-1, -t, 0], [1, -t, 0], [0, -1, t], [0, 1, t], [0, -1, -t], [0, 1, -t], [t, 0, -1], [t, 0, 1], [-t, 0, -1], [-t, 0, 1]].map(V.norm);
+  let faces = [[0, 11, 5], [0, 5, 1], [0, 1, 7], [0, 7, 10], [0, 10, 11], [1, 5, 9], [5, 11, 4], [11, 10, 2], [10, 7, 6], [7, 1, 8], [3, 9, 4], [3, 4, 2], [3, 2, 6], [3, 6, 8], [3, 8, 9], [4, 9, 5], [2, 4, 11], [6, 2, 10], [8, 6, 7], [9, 8, 1]];
+  for (let lv = 0; lv < levels; lv++) {
+    const cache = new Map(), nf = [];
+    const mid = (a, b) => { const key = a < b ? a + ',' + b : b + ',' + a; if (!cache.has(key)) { verts.push(V.norm(V.scl(V.add(verts[a], verts[b]), 0.5))); cache.set(key, verts.length - 1); } return cache.get(key); };
+    for (const [a, b, c2] of faces) { const ab = mid(a, b), bc = mid(b, c2), ca = mid(c2, a); nf.push([a, ab, ca], [b, bc, ab], [c2, ca, bc], [ab, bc, ca]); }
+    faces = nf;
+  }
+  const seed = rng() * 100;
+  const pos = verts.map(v => {
+    const n = noise3(v[0] * 2.2 + seed, v[1] * 2.2, v[2] * 2.2) * 0.6 + noise3(v[0] * 5 + seed, v[1] * 5, v[2] * 5) * 0.4;
+    const rr = r * (0.78 + 0.45 * n);
+    return { p: V.add(c, [v[0] * rr, v[1] * rr * squash, v[2] * rr]), n, v };
+  });
+  const nrm = verts.map(() => [0, 0, 0]);
+  for (const [a, b, c2] of faces) {
+    const fn = V.cross(V.sub(pos[b].p, pos[a].p), V.sub(pos[c2].p, pos[a].p));
+    for (const i of [a, b, c2]) nrm[i] = V.add(nrm[i], fn);
+  }
+  const base = g.P.length / 3;
+  pos.forEach((q, i) => {
+    let n = V.norm(nrm[i]);
+    if (V.dot(n, q.v) < 0) n = V.scl(n, -1);
+    const shadeCol = V.scl(mixv(cA, cB, q.n), 0.7 + 0.45 * q.n * (0.6 + 0.4 * Math.max(q.v[1], 0)));
+    gv(g, q.p, n, shadeCol, sway, 1);
+  });
+  for (const f of faces) g.I.push(base + f[0], base + f[1], base + f[2]);
+}
+
+function jungleTree(seed) {
+  const g = Geo(), rng = makeRng(seed);
+  const H = 9 + rng() * 3, k1 = rng() * 6, k2 = rng() * 6;
+  const pts = [], radii = [];
+  for (let i = 0; i <= 8; i++) {
+    const t = i / 8;
+    pts.push([0.5 * Math.sin(t * 2.2 + k1) - 0.5 * Math.sin(k1), H * t, 0.35 * Math.sin(t * 1.7 + k2) - 0.35 * Math.sin(k2)]);
+    radii.push(0.24 + 0.34 * Math.pow(1 - t, 3));
+  }
+  const bark = (t, j) => V.scl([0.40, 0.34, 0.27], 0.85 + 0.3 * hash3i(Math.round(t * 10), j, seed));
+  tube(g, pts, radii, 8, bark, (t) => t * 0.12);
+  // Brettwurzeln
+  for (let i = 0; i < 4; i++) {
+    const a = i / 4 * Math.PI * 2 + rng(), d = [Math.cos(a), 0, Math.sin(a)];
+    const top = V.add(pts[0], [d[0] * 0.25, 2.0, d[2] * 0.25]), inner = V.add(pts[0], V.scl(d, 0.25)), outer = V.add(pts[0], V.add(V.scl(d, 1.6), [0, -0.1, 0]));
+    const midO = V.add(pts[0], V.add(V.scl(d, 0.7), [0, 0.5, 0]));
+    const n = V.norm(V.cross(d, [0, 1, 0]));
+    const ia = gv(g, top, n, [0.38, 0.32, 0.25], 0), ib = gv(g, inner, n, [0.34, 0.28, 0.22], 0), ic = gv(g, outer, n, [0.34, 0.28, 0.22], 0), id = gv(g, midO, n, [0.37, 0.31, 0.24], 0);
+    g.I.push(ia, ib, id, ib, ic, id);
+  }
+  // Äste mit Baumkronen und Lianen
+  const crowns = [];
+  for (let i = 0; i < 5; i++) {
+    const a = i / 5 * Math.PI * 2 + rng() * 1.0, y = H * (0.62 + rng() * 0.25), pi = Math.min(8, Math.round(y / H * 8));
+    const start = [pts[pi][0], y, pts[pi][2]];
+    const L = 2.6 + rng() * 1.6, d = V.norm([Math.cos(a), 0.5 + rng() * 0.3, Math.sin(a)]);
+    const bp = [], br = [];
+    for (let j = 0; j <= 3; j++) { const t = j / 3; bp.push(V.add(start, V.add(V.scl(d, L * t), [0, -0.3 * t * t, 0]))); br.push(0.16 * (1 - t) + 0.06); }
+    tube(g, bp, br, 5, bark, (t) => 0.12 + t * 0.2);
+    crowns.push(V.add(bp[3], [0, 0.5, 0]));
+    if (i < 3) {
+      const lp = V.add(start, V.scl(d, L * 0.6)), drop = 3.5 + rng() * 4;
+      let prev = null;
+      for (let j = 0; j <= 5; j++) {
+        const t = j / 5, p = V.add(lp, [Math.sin(t * 3 + a) * 0.25, -drop * t, Math.cos(t * 2 + a) * 0.25]);
+        const a1 = gv(g, V.add(p, [-0.03, 0, 0]), [0, 0, 1], [0.26, 0.30, 0.13], 0.2 + t * 0.8), a2 = gv(g, V.add(p, [0.03, 0, 0]), [0, 0, 1], [0.26, 0.30, 0.13], 0.2 + t * 0.8);
+        if (prev) g.I.push(prev[0], a1, a2, prev[0], a2, prev[1]);
+        prev = [a1, a2];
+      }
+    }
+  }
+  crowns.push(V.add(pts[8], [0, 1.0, 0]));
+  crowns.push(V.add(pts[8], [1.2 * Math.cos(k1), 0.2, 1.2 * Math.sin(k1)]));
+  for (const c of crowns) blob(g, c, 2.6 + rng() * 1.2, 0.62, rng, [0.07, 0.24, 0.06], [0.22, 0.46, 0.12], 0.18, 1);
+  return geoMesh(g);
+}
+// Einfacher Baum für die Hügel im Hintergrund
+function farTree(seed) {
+  const g = Geo(), rng = makeRng(seed), H = 8 + rng() * 3;
+  tube(g, [[0, 0, 0], [0, H * 0.5, 0], [0.3, H, 0]], [0.35, 0.25, 0.18], 5, () => [0.36, 0.31, 0.25], (t) => t * 0.1);
+  blob(g, [0.3, H + 0.6, 0], 3.4 + rng(), 0.6, rng, [0.07, 0.23, 0.06], [0.20, 0.42, 0.11], 0.12, 1);
+  blob(g, [-1.4, H - 0.6, 1.0], 2.4 + rng(), 0.6, rng, [0.07, 0.23, 0.06], [0.20, 0.42, 0.11], 0.12, 1);
+  return geoMesh(g);
+}
+function palmTree(seed) {
+  const g = Geo(), rng = makeRng(seed);
+  const H = 6 + rng() * 2, lean = 1.4 + rng() * 1.2;
+  const pts = [], radii = [];
+  for (let i = 0; i <= 12; i++) { const t = i / 12; pts.push([0, H * t, lean * t * t]); radii.push(0.2 - 0.06 * t); }
+  tube(g, pts, radii, 8, (t, j) => (Math.round(t * 12) % 2 ? [0.58, 0.47, 0.33] : [0.48, 0.38, 0.27]), (t) => t * t * 0.4);
+  const top = pts[12];
+  for (let i = 0; i < 4; i++) { // Kokosnüsse
+    const a = i / 4 * Math.PI * 2, c = V.add(top, [Math.cos(a) * 0.17, -0.12, Math.sin(a) * 0.17]);
+    blob(g, c, 0.11, 1, rng, [0.30, 0.22, 0.10], [0.42, 0.34, 0.14], 0.4, 0);
+  }
+  for (let i = 0; i < 10; i++) {
+    const a = i / 10 * Math.PI * 2 + rng() * 0.3, d = [Math.cos(a), 0, Math.sin(a)];
+    frond(g, top, d, 2.8 + rng() * 0.8, 0.35 + rng() * 0.4, 0.9, 14, 0.24, 0.5, [0.24, 0.42, 0.12], [0.45, 0.58, 0.18], 1.0);
+  }
+  return geoMesh(g);
+}
+function fern(seed) {
+  const g = Geo(), rng = makeRng(seed);
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2 + rng() * 0.5;
+    frond(g, [0, 0, 0], [Math.cos(a), 0, Math.sin(a)], 0.8 + rng() * 0.4, 0.9 + rng() * 0.35, 1.1, 10, 0.17, 0.25, [0.12, 0.34, 0.08], [0.32, 0.56, 0.16], 0.6);
+  }
+  return geoMesh(g);
+}
+function bush(seed, flowers) {
+  const g = Geo(), rng = makeRng(seed);
+  for (let i = 0; i < 8; i++) {
+    const a = i / 8 * Math.PI * 2 + rng() * 0.6, d = [Math.cos(a), 0, Math.sin(a)];
+    const h = 0.45 + rng() * 0.6, end = V.add(V.scl(d, 0.25 + rng() * 0.2), [0, h, 0]);
+    tube(g, [[d[0] * 0.04, 0, d[2] * 0.04], V.add(V.scl(end, 0.5), [0, 0.05, 0]), end], [0.018, 0.014, 0.01], 4, () => [0.20, 0.36, 0.10], (t) => t * 0.6);
+    const ld = V.norm(V.add(d, [0, 0.35 + rng() * 0.3, 0]));
+    leafBlade(g, end, ld, V.norm(V.sub([0, 1, 0], V.scl(ld, ld[1]))), 0.55 + rng() * 0.35, 0.16 + rng() * 0.1, 0.6, [0.10, 0.34, 0.08], [0.22, 0.50, 0.12], 0.6, 1.2);
+  }
+  if (flowers) {
+    for (let i = 0; i < 3; i++) {
+      const a = rng() * Math.PI * 2, b = [Math.cos(a) * 0.15, 0, Math.sin(a) * 0.15], top = V.add(b, [0, 0.9 + rng() * 0.4, 0]);
+      tube(g, [b, top], [0.015, 0.012], 4, () => [0.22, 0.38, 0.1], (t) => t * 0.5);
+      for (let j = 0; j < 4; j++) { // Blüten
+        const c = V.add(top, [0, -j * 0.09, 0]), s = j % 2 ? 1 : -1, tip = V.add(c, [Math.cos(a + 1.6) * 0.14 * s, 0.05, Math.sin(a + 1.6) * 0.14 * s]);
+        const n = [0, 1, 0], col = j === 0 ? [0.95, 0.75, 0.15] : [0.92, 0.22, 0.12];
+        const i0 = gv(g, V.add(c, [0, 0.03, 0]), n, col, 0.6), i1 = gv(g, V.add(c, [0, -0.03, 0]), n, col, 0.6), i2 = gv(g, tip, n, [0.98, 0.55, 0.12], 0.7);
+        g.I.push(i0, i1, i2);
+      }
+    }
+  }
+  return geoMesh(g);
+}
+function grass(seed, reeds) {
+  const g = Geo(), rng = makeRng(seed);
+  const n = reeds ? 12 : 16;
+  for (let i = 0; i < n; i++) {
+    const a = rng() * Math.PI * 2, r = rng() * (reeds ? 0.25 : 0.18), p0 = [Math.cos(a) * r, 0, Math.sin(a) * r];
+    const h = reeds ? 1.1 + rng() * 0.8 : 0.3 + rng() * 0.35, la = rng() * Math.PI * 2, lean = [Math.cos(la) * h * 0.3, 0, Math.sin(la) * h * 0.3];
+    const w = reeds ? 0.012 : 0.02, side = V.norm(V.cross(V.norm(V.add(lean, [0, h, 0])), [Math.sin(la), 0, -Math.cos(la)]));
+    const s = V.scl([Math.sin(la), 0, -Math.cos(la)], w);
+    const cB = reeds ? [0.30, 0.40, 0.16] : [0.16, 0.34, 0.08], cT = reeds ? [0.55, 0.60, 0.30] : [0.48, 0.62, 0.22];
+    const m = V.add(p0, V.add(V.scl(lean, 0.3), [0, h * 0.55, 0])), tip = V.add(p0, V.add(lean, [0, h, 0]));
+    const nn = V.norm(V.cross(s, V.sub(tip, p0)));
+    const b1 = gv(g, V.sub(p0, s), nn, cB, 0), b2 = gv(g, V.add(p0, s), nn, cB, 0);
+    const m1 = gv(g, V.sub(m, V.scl(s, 0.7)), nn, mixv(cB, cT, 0.5), 0.4), m2 = gv(g, V.add(m, V.scl(s, 0.7)), nn, mixv(cB, cT, 0.5), 0.4);
+    const t = gv(g, tip, nn, cT, 1);
+    g.I.push(b1, b2, m2, b1, m2, m1, m1, m2, t);
+    if (reeds && i % 4 === 0) { // Rohrkolben
+      const c0 = V.add(p0, V.add(V.scl(lean, 0.85), [0, h * 0.85, 0]));
+      tube(g, [c0, V.add(c0, V.add(V.scl(lean, 0.1), [0, 0.16, 0]))], [0.022, 0.02], 5, () => [0.36, 0.22, 0.12], () => 0.9);
+    }
+  }
+  return geoMesh(g);
+}
+
+// Höhe des Geländes an (x, z)
+function landDistJS(x, z) {
+  let s = Math.hypot(x, z) - shoreR(Math.atan2(z, x));
+  for (const I of ISLANDS) s = Math.max(s, I.r - Math.hypot(x - I.x, z - I.z));
+  return s;
+}
+function terrainH(x, z) {
+  const u = Math.hypot(x, z) - shoreR(Math.atan2(z, x));
+  let h;
+  if (u < 3) h = WATER_Y + Math.max(u, -14) * 0.15;
+  else h = WATER_Y + 0.45 + (u - 3) * 0.05 + smooth(4, 70, u) * (5 + 22 * fbm2(x * 0.012, z * 0.012)) + Math.max(u - 60, 0) * 0.06;
+  for (const I of ISLANDS) {
+    const d = Math.hypot(x - I.x, z - I.z);
+    if (d < I.r * 1.8) h = Math.max(h, WATER_Y + 0.6 * (1 - (d / I.r) * (d / I.r)) + 0.15 * noise3(x * 0.8, 3.5, z * 0.8) * smooth(I.r, 0, d));
+  }
+  return h;
+}
+function terrainMesh() {
+  const g = Geo();
+  const radii = [];
+  for (let r = 12; r < 70; r += 0.9) radii.push(r);
+  for (let r = 70; r < 430; r *= 1.07) radii.push(r);
+  const A = 128, idx = [];
+  for (let i = 0; i < radii.length; i++) {
+    const row = [];
+    for (let j = 0; j <= A; j++) {
+      const th = j / A * Math.PI * 2, x = Math.cos(th) * radii[i], z = Math.sin(th) * radii[i];
+      const h = terrainH(x, z), e = 0.5;
+      const n = V.norm([terrainH(x - e, z) - terrainH(x + e, z), 2 * e, terrainH(x, z - e) - terrainH(x, z + e)]);
+      const s = landDistJS(x, z), above = h - WATER_Y;
+      let col = mixv([0.62, 0.55, 0.40], [0.86, 0.79, 0.58], smooth(0.02, 0.2, above));   // nasser / trockener Sand
+      col = mixv(col, [0.22, 0.34, 0.12], smooth(1.8, 5, s) * smooth(0.3, 0.7, above));   // Dschungelboden
+      const canopy = smooth(8, 22, s);
+      col = mixv(col, [0.13, 0.32, 0.09], canopy);
+      g.P.push(x, h, z); g.N.push(...n); g.C.push(...col); g.E.push(0, canopy * 0.9);
+      row.push({ i: g.P.length / 3 - 1, h });
+    }
+    idx.push(row);
+  }
+  for (let i = 0; i < radii.length - 1; i++) for (let j = 0; j < A; j++) {
+    const a = idx[i][j], b = idx[i][j + 1], c = idx[i + 1][j + 1], d = idx[i + 1][j];
+    if (Math.max(a.h, b.h, c.h, d.h) < WATER_Y - 0.4) continue;   // unter Wasser: weglassen
+    g.I.push(a.i, b.i, c.i, a.i, c.i, d.i);
+  }
+  return geoMesh(g);
+}
+
+// Pflanzen verteilen
+const VEG = (() => {
+  const rng = makeRng(20261117);
+  const kinds = {
+    tree: [jungleTree(11), jungleTree(23)], far: [farTree(31), farTree(37)], palm: [palmTree(5), palmTree(9)], bush: [bush(3, false), bush(7, true)],
+    fern: [fern(13), fern(17)], grass: [grass(19, false)], reed: [grass(29, true)],
+  };
+  const lists = {};
+  for (const k in kinds) lists[k] = kinds[k].map(() => []);
+  const put = (k, x, z, s, opts = {}) => {
+    const y = opts.y ?? terrainH(x, z);
+    const v = Math.floor(rng() * kinds[k].length);
+    lists[k][v].push(x, y - (opts.sink || 0.05), z, opts.rot ?? rng() * Math.PI * 2, s, opts.hs ?? (0.85 + rng() * 0.3), rng() * 2 - 1, rng() * 6.28);
+  };
+  const onRing = (u0, u1) => { const th = rng() * Math.PI * 2, u = u0 + rng() * (u1 - u0), r = shoreR(th) + u; return [Math.cos(th) * r, Math.sin(th) * r]; };
+  for (let i = 0; i < 30; i++) { const [x, z] = onRing(6, 30); put('tree', x, z, 0.85 + rng() * 0.5, { sink: 0.3 }); }
+  for (let i = 0; i < 150; i++) { const [x, z] = onRing(18, 110); put('far', x, z, 0.9 + rng() * 0.6, { sink: 0.5 }); }
+  for (let i = 0; i < 24; i++) {
+    const [x, z] = onRing(1.2, 6);
+    put('palm', x, z, 0.85 + rng() * 0.35, { rot: Math.atan2(-x, -z) + (rng() - 0.5) * 0.8 });
+  }
+  for (let i = 0; i < 55; i++) { const [x, z] = onRing(2.5, 20); put('bush', x, z, 0.9 + rng() * 1.1); }
+  for (let i = 0; i < 65; i++) { const [x, z] = onRing(2.5, 22); put('fern', x, z, 0.8 + rng() * 0.8); }
+  for (let i = 0; i < 170; i++) { const [x, z] = onRing(0.6, 12); put('grass', x, z, 0.8 + rng() * 0.8); }
+  for (let i = 0; i < 50; i++) {
+    const [x, z] = onRing(-2.4, -0.4);
+    put('reed', x, z, 0.8 + rng() * 0.5, { y: WATER_Y, sink: 0.25 });
+  }
+  for (const I of ISLANDS) {
+    for (let i = 0; i < (I.r > 4 ? 2 : 1); i++) {
+      const a = rng() * Math.PI * 2, d = rng() * I.r * 0.35, x = I.x + Math.cos(a) * d, z = I.z + Math.sin(a) * d;
+      put('palm', x, z, 0.8 + rng() * 0.3, { rot: Math.atan2(x - I.x, z - I.z) + (rng() - 0.5) });
+    }
+    const near = (f) => { const a = rng() * Math.PI * 2, d = Math.sqrt(rng()) * I.r * f; return [I.x + Math.cos(a) * d, I.z + Math.sin(a) * d]; };
+    for (let i = 0; i < 2; i++) { const [x, z] = near(0.6); put('bush', x, z, 0.8 + rng() * 0.6); }
+    for (let i = 0; i < 4; i++) { const [x, z] = near(0.7); put('fern', x, z, 0.7 + rng() * 0.5); }
+    for (let i = 0; i < 10; i++) { const [x, z] = near(0.85); put('grass', x, z, 0.8 + rng() * 0.6); }
+  }
+  const draws = [];
+  for (const k in kinds) kinds[k].forEach((m, v) => { if (lists[k][v].length) { setInstances(m, lists[k][v]); draws.push({ m }); } });
+  const terrain = terrainMesh();
+  let tris = terrain.tris;
+  for (const d of draws) tris += d.m.tris * d.m.instances;
+  return { draws, terrain, tris };
+})();
+
+// ---------------------------------------------------------------------
+// Plattform aufbauen
+// ---------------------------------------------------------------------
+const BAMBOO = [0.80, 0.68, 0.42], BAMBOO_GREEN = [0.60, 0.64, 0.34], ROPE = [0.34, 0.24, 0.13], WOOD = [0.52, 0.36, 0.21];
+const AXES = [[1, 0, 0], [0, 1, 0], [0, 0, 1]];
+const STATIC = [];
+const addCyl = (c, a, r, h, color, seed) => STATIC.push({ mesh: CYL, model: cylModel(c, a, r, h), color, mode: 2, axis: AXES[a], seed });
+const addRope = (c, r, l) => STATIC.push({ mesh: CYL, model: cylModel(c, 1, r, l / 2), color: ROPE, mode: 0 });
+
+STATIC.push({ mesh: BOX, model: M4.trs([0, -0.05, 0], [2 * HALF, 0.1, 2 * HALF]), color: BAMBOO, mode: 1 });
+for (let x = -HALF + 0.8; x <= HALF - 0.7; x += 1.8) addCyl([x, -0.17, 0], 2, 0.07, HALF - 0.1, BAMBOO, x * 3.1);
+for (const b of COLLIDERS) {
+  if (b.type !== 'cyl') continue;
+  addCyl(b.c, b.a, b.r, b.h, b.a === 1 ? BAMBOO_GREEN : BAMBOO, b.c[0] * 1.7 + b.c[2] * 2.3);
+}
+for (let t = -HALF + 3; t < HALF - 1; t += 3) {
+  const bot = WATER_Y - 3, top = -0.03;
+  for (const s of [-1, 1]) {
+    addCyl([t, (bot + top) / 2, s * EDGE], 1, 0.075, (top - bot) / 2, BAMBOO_GREEN, t + s);
+    addCyl([s * EDGE, (bot + top) / 2, t], 1, 0.075, (top - bot) / 2, BAMBOO_GREEN, t - s);
+  }
+}
+for (const sx of [-1, 1]) for (const sz of [-1, 1]) {
+  addRope([sx * EDGE, 0.02, sz * EDGE], 0.108, 0.16);
+  addRope([sx * EDGE, POST_TOP - 0.15, sz * EDGE], 0.1, 0.08);
+}
+for (const sx of [-1, 1]) for (const dy of [-0.42, 0.42]) addRope([sx * SIGN.poleX, SIGN.y + dy, SIGN.z], 0.072, 0.07);
+STATIC.push({ mesh: BOX, model: M4.trs([0, SIGN.y, SIGN.z], [SIGN.w, SIGN.h, 0.06]), color: WOOD, mode: 0 });
+
+// Schild mit Text (wird bei Änderungen neu gezeichnet)
+const signCanvas = document.createElement('canvas');
+signCanvas.width = 1024; signCanvas.height = 448;
+const signTex = gl.createTexture();
+function updateSign() {
+  const c = signCanvas.getContext('2d'), W = signCanvas.width, H = signCanvas.height;
+  c.fillStyle = '#8a5f37'; c.fillRect(0, 0, W, H);
+  for (let i = 0; i < 6; i++) {
+    c.fillStyle = i % 2 ? 'rgba(0,0,0,0.06)' : 'rgba(255,255,255,0.05)';
+    c.fillRect(0, i * H / 6, W, H / 6);
+    c.fillStyle = 'rgba(0,0,0,0.25)'; c.fillRect(0, i * H / 6, W, 3);
+  }
+  c.strokeStyle = '#4a2f18'; c.lineWidth = 16; c.strokeRect(8, 8, W - 16, H - 16);
+  c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillStyle = '#fff4dc';
+  c.font = 'bold 104px system-ui, sans-serif';
+  c.fillText('AFFENPLATTE', W / 2, 120);
+  c.font = 'bold 76px system-ui, sans-serif';
+  if (Net.role === 'host' || Net.role === 'client') {
+    c.fillStyle = '#ffd27a';
+    c.fillText('Raum: ' + Net.code, W / 2, 260);
+    c.fillStyle = '#fff4dc'; c.font = '58px system-ui, sans-serif';
+    c.fillText(Net.count === 1 ? 'Nur du bist hier' : Net.count + ' Spieler', W / 2, 365);
+  } else {
+    c.fillText('Allein-Modus', W / 2, 280);
+  }
+  gl.bindTexture(gl.TEXTURE_2D, signTex);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, signCanvas);
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, false);
+  gl.generateMipmap(gl.TEXTURE_2D);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR_MIPMAP_LINEAR);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+  gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+}
+const SIGN_FRONT = M4.trs([0, SIGN.y, SIGN.z + 0.031], [SIGN.w - 0.08, SIGN.h - 0.08, 1]);
+const SIGN_BACK = M4.mul(M4.translate(0, SIGN.y, SIGN.z - 0.031), M4.mul(M4.rotY(Math.PI), M4.trs([0, 0, 0], [SIGN.w - 0.08, SIGN.h - 0.08, 1])));
+
+// ---------------------------------------------------------------------
+// Zeichnen
+// ---------------------------------------------------------------------
+function drawLit(m, model, color, o = {}) {
+  const u = litProg.u;
+  gl.uniformMatrix4fv(u.uModel, false, model);
+  gl.uniform3fv(u.uColor, color);
+  gl.uniform1i(u.uMode, o.mode || 0);
+  gl.uniform3fv(u.uAxis, o.axis || AXES[1]);
+  gl.uniform1f(u.uSeed, o.seed || 0);
+  gl.uniform1f(u.uEmissive, o.emissive || 0);
+  gl.uniform1f(u.uAlpha, o.alpha ?? 1);
+  draw(m);
+}
+
+// Ein Affe: s = { h: Kopfposition, q: Kopfdrehung, l / r: Handpositionen }
+function drawApe(s, color, self = false, flash = [0, 0]) {
+  const rig = APE.pose(s.h, s.q, [s.l, s.r]);
+  const u = charProg.u;
+  gl.uniform3fv(u.uColor, color);
+  gl.uniform1f(u.uHide, self ? 1 : 0);
+  gl.uniform1f(u.uFlash, 0);
+  gl.uniform1i(u.uPart, 0);
+  gl.uniformMatrix4fv(u.uBones, false, rig.bones);
+  draw(APE.meshes.body);
+  gl.uniform1f(u.uHide, 0);
+  for (let k = 0; k < 2; k++) {
+    gl.uniform1f(u.uFlash, flash[k]);
+    gl.uniformMatrix4fv(u.uBones, false, rig.hands[k]);
+    draw(APE.meshes.hands[k]);
+  }
+  gl.uniform1f(u.uFlash, 0);
+  if (!self) {
+    gl.uniform1i(u.uPart, 1);
+    gl.uniformMatrix4fv(u.uBones, false, rig.head);
+    draw(APE.meshes.head);
+  }
+}
+
+const handFlash = [0, 0];
+let localApe = null;   // eigener Affe (nur Arme und Hände sichtbar)
+function drawScene(proj, view, eye, t) {
+  // Himmel
+  gl.disable(gl.CULL_FACE); gl.depthMask(false);
+  gl.useProgram(skyProg.p);
+  gl.uniformMatrix4fv(skyProg.u.uView, false, view);
+  gl.uniformMatrix4fv(skyProg.u.uProj, false, proj);
+  gl.uniform3fv(skyProg.u.uCenter, eye);
+  gl.uniform1f(skyProg.u.uTime, t);
+  draw(SPHERE);
+  gl.depthMask(true); gl.enable(gl.CULL_FACE);
+
+  // Plattform
+  gl.useProgram(litProg.p);
+  gl.uniformMatrix4fv(litProg.u.uView, false, view);
+  gl.uniformMatrix4fv(litProg.u.uProj, false, proj);
+  gl.uniform3fv(litProg.u.uFog, SKY_HORIZON);
+  gl.uniform1f(litProg.u.uFogDensity, FOG_DENSITY);
+  gl.uniform3fv(litProg.u.uEye, eye);
+  for (const it of STATIC) drawLit(it.mesh, it.model, it.color, it);
+
+  // Affen
+  gl.useProgram(charProg.p);
+  gl.uniformMatrix4fv(charProg.u.uView, false, view);
+  gl.uniformMatrix4fv(charProg.u.uProj, false, proj);
+  gl.uniform3fv(charProg.u.uFog, SKY_HORIZON);
+  gl.uniform1f(charProg.u.uFogDensity, FOG_DENSITY);
+  gl.uniform3fv(charProg.u.uEye, eye);
+  for (const p of Net.players.values()) if (p.cur) drawApe(p.cur, COLORS[p.color]);
+  if (xrSession && localApe) drawApe(localApe, COLORS[myColor], true, handFlash);
+
+  // Schild
+  gl.useProgram(texProg.p);
+  gl.uniformMatrix4fv(texProg.u.uView, false, view);
+  gl.uniformMatrix4fv(texProg.u.uProj, false, proj);
+  gl.uniform3fv(texProg.u.uFog, SKY_HORIZON);
+  gl.uniform1f(texProg.u.uFogDensity, FOG_DENSITY);
+  gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, signTex);
+  gl.uniform1i(texProg.u.uTex, 0);
+  for (const m of [SIGN_FRONT, SIGN_BACK]) {
+    gl.uniformMatrix4fv(texProg.u.uModel, false, m);
+    draw(QUAD);
+  }
+
+  // Gelände und Pflanzen (beidseitig)
+  gl.disable(gl.CULL_FACE);
+  gl.useProgram(vegProg.p);
+  gl.uniformMatrix4fv(vegProg.u.uView, false, view);
+  gl.uniformMatrix4fv(vegProg.u.uProj, false, proj);
+  gl.uniform1f(vegProg.u.uTime, t);
+  gl.uniform3fv(vegProg.u.uFog, SKY_HORIZON);
+  gl.uniform1f(vegProg.u.uFogDensity, FOG_DENSITY);
+  gl.uniform1f(vegProg.u.uLeafScale, 0.22);
+  gl.vertexAttrib4f(6, 0, 0, 0, 0); gl.vertexAttrib4f(7, 1, 1, 0, 0);
+  draw(VEG.terrain);
+  gl.uniform1f(vegProg.u.uLeafScale, 1.3);
+  for (const d of VEG.draws) {
+    gl.bindVertexArray(d.m.vao);
+    gl.drawElementsInstanced(gl.TRIANGLES, d.m.count, d.m.type, 0, d.m.instances);
+  }
+  gl.enable(gl.CULL_FACE);
+
+  // Wasser
+  gl.useProgram(waterProg.p);
+  gl.uniformMatrix4fv(waterProg.u.uView, false, view);
+  gl.uniformMatrix4fv(waterProg.u.uProj, false, proj);
+  gl.uniform3fv(waterProg.u.uCenter, eye);
+  gl.uniform1f(waterProg.u.uSize, 600);
+  gl.uniform1f(waterProg.u.uY, WATER_Y);
+  gl.uniform3fv(waterProg.u.uEye, eye);
+  gl.uniform3fv(waterProg.u.uFog, SKY_HORIZON);
+  gl.uniform1f(waterProg.u.uTime, t);
+  gl.uniform1f(waterProg.u.uHalf, HALF);
+  gl.uniform1f(waterProg.u.uFogDensity, FOG_DENSITY);
+  gl.uniform3fv(waterProg.u.uIslands, ISLANDS.flatMap(I => [I.x, I.z, I.r]));
+  draw(PLANE);
+
+  // Schatten (Blobs)
+  gl.useProgram(litProg.p);
+  gl.enable(gl.BLEND); gl.blendFuncSeparate(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA, gl.ZERO, gl.ONE); gl.depthMask(false);
+  gl.enable(gl.POLYGON_OFFSET_FILL); gl.polygonOffset(-2, -2);
+  const blobShadow = (p, radius, strength) => {
+    const top = Physics.groundBelow(p, COLLIDERS);
+    if (top === null) return;
+    const hgt = p[1] - top, a = strength * Math.max(0, 1 - hgt / 4);
+    if (a <= 0.01) return;
+    const r = radius * (1 + hgt * 0.15);
+    drawLit(SPHERE, M4.trs([p[0], top + 0.004, p[2]], [r, 0.001, r]), [0, 0, 0], { alpha: a });
+  };
+  if (xrSession) {
+    blobShadow(player.toWorld(player.head), 0.3, 0.35);
+    for (const h of player.hands) if (h.active) blobShadow(h.pos, 0.07, 0.45);
+  }
+  for (const p of Net.players.values()) {
+    if (!p.cur) continue;
+    blobShadow(V.add(p.cur.h, [0, -0.35, 0]), 0.3, 0.4);
+    for (const h of [p.cur.l, p.cur.r]) if (h) blobShadow(h, 0.07, 0.4);
+  }
+  gl.disable(gl.POLYGON_OFFSET_FILL); gl.depthMask(true); gl.disable(gl.BLEND);
+  gl.bindVertexArray(null);
+}
+
+// ---------------------------------------------------------------------
+// Sound (wird per Code erzeugt) + Vibration
+// ---------------------------------------------------------------------
+let audio = null, noiseBuf = null, splashBuf = null, ambientOn = false;
+function ensureAudio() {
+  try {
+    if (!audio) {
+      audio = new (window.AudioContext || window.webkitAudioContext)();
+      const sr = audio.sampleRate;
+      noiseBuf = audio.createBuffer(1, sr * 0.1, sr);
+      let d = noiseBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3);
+      splashBuf = audio.createBuffer(1, sr * 0.7, sr);
+      d = splashBuf.getChannelData(0);
+      for (let i = 0; i < d.length; i++) {
+        const t = i / sr;
+        d[i] = (Math.random() * 2 - 1) * Math.min(1, t * 80) * Math.exp(-t * 6) * (0.7 + 0.3 * Math.sin(t * 90));
+      }
+    }
+    if (audio.state === 'suspended') audio.resume();
+  } catch (e) { /* kein Audio */ }
+}
+function thump(strength) {
+  if (!audio || audio.state !== 'running') return;
+  const t = audio.currentTime, k = Math.min(1, strength);
+  const o = audio.createOscillator(), g = audio.createGain();
+  o.type = 'sine';
+  o.frequency.setValueAtTime(160 + 60 * k, t);
+  o.frequency.exponentialRampToValueAtTime(70, t + 0.08);
+  g.gain.setValueAtTime(0.0001, t);
+  g.gain.exponentialRampToValueAtTime(0.04 + 0.25 * k, t + 0.005);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
+  o.connect(g).connect(audio.destination); o.start(t); o.stop(t + 0.12);
+  const n = audio.createBufferSource(), ng = audio.createGain(), bp = audio.createBiquadFilter();
+  n.buffer = noiseBuf; bp.type = 'bandpass'; bp.frequency.value = 1100 + 900 * k; bp.Q.value = 1.2; ng.gain.value = 0.08 + 0.25 * k;
+  n.connect(bp).connect(ng).connect(audio.destination); n.start(t);
+}
+function splash(strength) {
+  if (!audio || audio.state !== 'running') return;
+  const t = audio.currentTime, k = Math.min(1, strength);
+  const n = audio.createBufferSource(), f = audio.createBiquadFilter(), g = audio.createGain();
+  n.buffer = splashBuf; f.type = 'lowpass';
+  f.frequency.setValueAtTime(900 + 2600 * k, t); f.frequency.exponentialRampToValueAtTime(250, t + 0.6);
+  g.gain.value = 0.12 + 0.4 * k;
+  n.connect(f).connect(g).connect(audio.destination); n.start(t);
+}
+function startAmbient() { // leises Meeresrauschen
+  if (!audio || ambientOn) return;
+  ambientOn = true;
+  const sr = audio.sampleRate, b = audio.createBuffer(1, sr * 4, sr), d = b.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < d.length; i++) { last = last * 0.97 + (Math.random() * 2 - 1) * 0.03; d[i] = last * 4; }
+  const n = audio.createBufferSource(); n.buffer = b; n.loop = true;
+  const f = audio.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = 600;
+  const g = audio.createGain(); g.gain.value = 0.05;
+  const lfo = audio.createOscillator(), lg = audio.createGain();
+  lfo.frequency.value = 0.12; lg.gain.value = 0.03;
+  lfo.connect(lg).connect(g.gain);
+  n.connect(f).connect(g).connect(audio.destination); n.start(); lfo.start();
+}
+function buzz(src, strength, ms) {
+  try {
+    const gp = src && src.gamepad; if (!gp) return;
+    const h = gp.hapticActuators && gp.hapticActuators[0];
+    if (h && h.pulse) { const r = h.pulse(strength, ms); if (r && r.catch) r.catch(() => {}); }
+    else if (gp.vibrationActuator) gp.vibrationActuator.playEffect('dual-rumble', { duration: ms, strongMagnitude: strength, weakMagnitude: strength }).catch(() => {});
+  } catch (e) { /* ignorieren */ }
+}
+
+// ---------------------------------------------------------------------
+// WebXR
+// ---------------------------------------------------------------------
+const HAND_FORWARD = 0.04;   // Handkugel leicht vor dem Controller (Knöchel)
+const SNAP_ANGLE = Math.PI / 4;
+const r3 = (a) => a.map(v => Math.round(v * 1000) / 1000);
+let xrSession = null, xrRef = null, xrLayer = null, floorOffset = 0, lastT = 0, needSpawn = false;
+let turnLatch = false, respawnLatch = false, paused = false, sendAcc = 0;
+const handWasWet = [false, false];
+
+function randomSpawn() {
+  const a = Math.random() * Math.PI * 2, r = Math.random() * 1.2;
+  player.spawn = [SPAWN[0] + Math.cos(a) * r, SPAWN[1], SPAWN[2] + Math.sin(a) * r];
+}
+
+async function enterVR() {
+  ensureAudio();
+  const s = await navigator.xr.requestSession('immersive-vr', { optionalFeatures: ['local-floor', 'hand-tracking'] });
+  try {
+    await gl.makeXRCompatible();
+    xrLayer = new XRWebGLLayer(s, gl, { antialias: true });
+    try { if ('fixedFoveation' in xrLayer) xrLayer.fixedFoveation = 0.5; } catch (e) {}
+    s.updateRenderState({ baseLayer: xrLayer, depthNear: 0.02, depthFar: 1000 });
+    try { xrRef = await s.requestReferenceSpace('local-floor'); floorOffset = 0; }
+    catch (e) { xrRef = await s.requestReferenceSpace('local'); floorOffset = 1.6; }
+    if (s.supportedFrameRates && s.updateTargetFrameRate) {
+      const rates = Array.from(s.supportedFrameRates);
+      if (rates.includes(90)) s.updateTargetFrameRate(90).catch(() => {});
+    }
+  } catch (e) { s.end(); throw e; }
+  xrSession = s; lastT = 0; needSpawn = true; paused = false;
+  startAmbient();
+  ui.style.display = 'none';
+  // Systemmenü offen (Meta-Taste) => Spiel pausieren
+  s.addEventListener('visibilitychange', () => { paused = s.visibilityState !== 'visible'; lastT = 0; });
+  s.addEventListener('end', () => {
+    xrSession = null; ui.style.display = '';
+    requestAnimationFrame(desktopFrame);
+  });
+  s.requestAnimationFrame(onXRFrame);
+}
+
+function onXRFrame(t, frame) {
+  const s = frame.session;
+  s.requestAnimationFrame(onXRFrame);
+  const pose = frame.getViewerPose(xrRef);
+  if (!pose) return;
+  const dt = lastT ? Math.min((t - lastT) / 1000, 0.1) : 1 / 72;
+  lastT = t;
+
+  const hp = pose.transform.position, ho = pose.transform.orientation;
+  const head = [hp.x, hp.y + floorOffset, hp.z];
+  if (needSpawn) { randomSpawn(); player.respawn(head); needSpawn = false; }
+
+  const locals = [null, null], sources = [null, null];
+  for (const src of s.inputSources) {
+    const k = src.handedness === 'left' ? 0 : src.handedness === 'right' ? 1 : -1;
+    if (k < 0) continue;
+    const space = src.gripSpace || src.targetRaySpace;
+    if (!space) continue;
+    const p = frame.getPose(space, xrRef);
+    if (!p) continue;
+    const o = p.transform.orientation, q = [o.x, o.y, o.z, o.w];
+    const off = qrot(q, [0, 0, -HAND_FORWARD]);
+    const pp = p.transform.position;
+    locals[k] = [pp.x + off[0], pp.y + floorOffset + off[1], pp.z + off[2]];
+    sources[k] = src;
+  }
+
+  // Eingaben: Snap-Turn (rechter Stick), Respawn (A / X)
+  if (paused) { for (const h of player.hands) { h.touching = false; h.prevLocal = null; } }
+  const rg = sources[1] && sources[1].gamepad;
+  const sx = rg && rg.axes.length >= 4 ? rg.axes[2] : 0;
+  if (!turnLatch && Math.abs(sx) > 0.7) { player.turn(sx > 0 ? -SNAP_ANGLE : SNAP_ANGLE, head); turnLatch = true; }
+  if (Math.abs(sx) < 0.3) turnLatch = false;
+  let resp = false;
+  for (const src of sources) { const gp = src && src.gamepad; if (gp && gp.buttons[4] && gp.buttons[4].pressed) resp = true; }
+  if (resp && !respawnLatch) { randomSpawn(); player.respawn(head); }
+  respawnLatch = resp;
+
+  if (!paused) player.update(dt, head, locals);
+
+  for (const ev of player.events) {
+    if (ev.type === 'touch') {
+      const k = Math.min(1, ev.speed / 3);
+      buzz(sources[ev.hand], 0.15 + 0.6 * k, 25 + 30 * k);
+      thump(k);
+      handFlash[ev.hand] = 1;
+    } else if (ev.type === 'respawn') {
+      splash(1); randomSpawn();
+    }
+  }
+  for (const h of player.hands) {
+    const wet = h.active && h.pos[1] < WATER_Y;
+    if (wet && !handWasWet[h.i]) { splash(0.35); buzz(sources[h.i], 0.3, 40); }
+    handWasWet[h.i] = wet;
+  }
+  handFlash[0] *= 0.85; handFlash[1] *= 0.85;
+
+  // Eigener Affe (für die Arme) und Position an die anderen schicken (20x pro Sekunde)
+  const eye = player.toWorld(head);
+  const H = player.hands;
+  const headQ = qmul(yawQuat(player.yaw), [ho.x, ho.y, ho.z, ho.w]);
+  localApe = { h: eye, q: headQ, l: H[0].active ? H[0].pos : null, r: H[1].active ? H[1].pos : null };
+  sendAcc += dt;
+  if (sendAcc >= 0.05 && !paused) {
+    sendAcc = 0;
+    Net.sendState({
+      h: r3(eye), q: headQ.map(v => Math.round(v * 1000) / 1000),
+      l: localApe.l ? r3(localApe.l) : null, r: localApe.r ? r3(localApe.r) : null, c: myColor,
+    });
+  }
+  Net.update(dt);
+
+  // Rendern
+  gl.bindFramebuffer(gl.FRAMEBUFFER, xrLayer.framebuffer);
+  gl.clearColor(...SKY_HORIZON, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+  // Welt -> Tracking-Raum (Spielerposition, Drehung, ggf. Boden-Ausgleich)
+  const worldToRig = M4.mul(M4.translate(0, -floorOffset, 0),
+    M4.mul(M4.rotY(-player.yaw), M4.translate(-player.pos[0], -player.pos[1], -player.pos[2])));
+  const time = (t / 1000) % 3600;
+  for (const view of pose.views) {
+    const vp = xrLayer.getViewport(view);
+    gl.viewport(vp.x, vp.y, vp.width, vp.height);
+    drawScene(view.projectionMatrix, M4.mul(view.transform.inverse.matrix, worldToRig), eye, time);
+  }
+}
+
+// ---------------------------------------------------------------------
+// Vorschau am PC / Handy (ohne VR)
+// ---------------------------------------------------------------------
+let orbit = 0.6, dragging = false, lastX = 0, prevNow = 0;
+canvas.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; });
+window.addEventListener('pointerup', () => { dragging = false; });
+window.addEventListener('pointermove', e => { if (dragging) { orbit -= (e.clientX - lastX) * 0.005; lastX = e.clientX; } });
+
+function desktopFrame(now) {
+  if (xrSession) return;
+  const dt = prevNow ? Math.min((now - prevNow) / 1000, 0.1) : 0; prevNow = now;
+  if (!dragging) orbit += dt * 0.05;
+  Net.update(dt);
+  const w = canvas.clientWidth, h = canvas.clientHeight, dpr = Math.min(window.devicePixelRatio || 1, 2);
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) { canvas.width = Math.round(w * dpr); canvas.height = Math.round(h * dpr); }
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.viewport(0, 0, canvas.width, canvas.height);
+  gl.clearColor(...SKY_HORIZON, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+  gl.enable(gl.DEPTH_TEST);
+  const eye = [Math.sin(orbit) * 17, 5.5, Math.cos(orbit) * 17];
+  const proj = M4.perspective(60 * Math.PI / 180, canvas.width / canvas.height, 0.05, 1000);
+  const view = M4.lookAt(eye, [0, -0.8, 0], [0, 1, 0]);
+  drawScene(proj, view, eye, (now / 1000) % 3600);
+  requestAnimationFrame(desktopFrame);
+}
+
+// ---------------------------------------------------------------------
+// Menü
+// ---------------------------------------------------------------------
+const colorsEl = $('colors');
+COLORS.forEach((c, i) => {
+  const b = document.createElement('button');
+  b.style.background = `rgb(${c.map(x => Math.round(x * 255)).join(',')})`;
+  b.setAttribute('aria-label', 'Farbe ' + (i + 1));
+  b.addEventListener('click', () => {
+    myColor = i;
+    try { localStorage.setItem('affenplatte-farbe', String(i)); } catch (e) {}
+    for (const x of colorsEl.children) x.classList.toggle('sel', x === b);
+  });
+  if (i === myColor) b.classList.add('sel');
+  colorsEl.appendChild(b);
+});
+
+const codeEl = $('code'), hostBtn = $('host'), joinBtn = $('join');
+function showCount(n) { $('count').textContent = n === 1 ? 'Noch ist niemand da.' : n + ' Spieler im Raum'; }
+Net.onStatus = (state, text) => {
+  $('lobby').hidden = state === 'room';
+  $('room').hidden = state !== 'room';
+  hostBtn.disabled = joinBtn.disabled = state === 'busy' || !Net.available;
+  $('netmsg').textContent = text;
+  $('roomcode').textContent = Net.code;
+  showCount(Net.count);
+  updateSign();
+};
+Net.onCount = (n) => { showCount(n); updateSign(); };
+hostBtn.addEventListener('click', () => Net.host());
+const doJoin = () => {
+  const c = codeEl.value.trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (c.length !== 4) { $('netmsg').textContent = 'Der Code hat 4 Zeichen.'; return; }
+  codeEl.blur();
+  Net.join(c);
+};
+joinBtn.addEventListener('click', doJoin);
+codeEl.addEventListener('keydown', e => { if (e.key === 'Enter') doJoin(); });
+$('leave').addEventListener('click', () => { Net.leave(); Net.onStatus('idle', 'Du hast den Raum verlassen.'); });
+if (!Net.available) { hostBtn.disabled = joinBtn.disabled = true; $('netmsg').textContent = 'Multiplayer konnte nicht geladen werden.'; }
+
+updateSign();
+requestAnimationFrame(desktopFrame);
+
+btn.addEventListener('click', () => {
+  enterVR().catch(e => { msg.textContent = 'VR konnte nicht gestartet werden: ' + e.message; });
+});
+(async () => {
+  if (!navigator.xr || !navigator.xr.isSessionSupported) {
+    msg.textContent = 'Kein WebXR hier. Öffne die Seite im Browser deiner Meta Quest.';
+    return;
+  }
+  let ok = false;
+  try { ok = await navigator.xr.isSessionSupported('immersive-vr'); } catch (e) {}
+  if (!ok) { msg.textContent = 'VR wird hier nicht unterstützt. Öffne die Seite im Browser deiner Meta Quest.'; return; }
+  btn.disabled = false; msg.textContent = '';
+})();
+</script>
+</body>
+</html>
